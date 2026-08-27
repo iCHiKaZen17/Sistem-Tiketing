@@ -13,24 +13,19 @@ export async function POST(
       return createErrorResponse('UNAUTHORIZED', 'Tidak terautentikasi.', 401);
     }
 
-    if (currentUser.role !== 'SUPERVISOR') {
-      return createErrorResponse('FORBIDDEN', 'Hanya Supervisor yang diperbolehkan membuka kembali tiket.', 403);
-    }
-
     const body = await request.json().catch(() => ({}));
 
-    const ticket = await TicketService.updateStatus({
+    const ticket = await TicketService.closeTicket({
       ticket_id: params.id,
-      new_status: 'IN_PROGRESS',
       actor_id: currentUser.id,
       actor_label: currentUser.full_name,
       actor_role: currentUser.role,
-      reason: body.reason || 'Tiket dibuka kembali oleh Supervisor',
+      reason: body.reason || undefined,
     });
 
     return NextResponse.json(ticket, { status: 200 });
   } catch (err: any) {
     const status = err.message.includes('Akses ditolak') || err.message.includes('diperbolehkan') ? 403 : 400;
-    return createErrorResponse('REOPEN_FAILED', err.message || 'Gagal membuka kembali tiket', status);
+    return createErrorResponse('CLOSE_FAILED', err.message || 'Gagal menutup tiket', status);
   }
 }

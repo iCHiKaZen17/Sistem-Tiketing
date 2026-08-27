@@ -24,6 +24,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [resolutionNote, setResolutionNote] = useState('');
   const [resolveLoading, setResolveLoading] = useState(false);
 
+  // Close/Reopen State
+  const [closeLoading, setCloseLoading] = useState(false);
+  const [reopenLoading, setReopenLoading] = useState(false);
+
   useEffect(() => {
     setCurrentUserState(getCurrentUser());
   }, []);
@@ -83,7 +87,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
       setSelectedStaff('');
       setAssignReason('');
-      fetchTicketDetail();
+      await fetchTicketDetail();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -113,7 +117,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       if (!res.ok) throw new Error(data.message || 'Gagal menyelesaikan tiket');
 
       setResolutionNote('');
-      fetchTicketDetail();
+      await fetchTicketDetail();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -121,7 +125,57 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     }
   };
 
+  const handleClose = async () => {
+    setCloseLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/tickets/${params.id}/close`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Gagal menutup tiket');
+
+      await fetchTicketDetail();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCloseLoading(false);
+    }
+  };
+
+  const handleReopen = async () => {
+    setReopenLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/tickets/${params.id}/reopen`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Gagal membuka kembali tiket');
+
+      await fetchTicketDetail();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setReopenLoading(false);
+    }
+  };
+
   const isSupervisor = currentUser?.role === 'SUPERVISOR';
+  const canAssign = isSupervisor && (ticket?.status === 'OPEN' || ticket?.status === 'IN_PROGRESS');
+  const canResolve = ticket?.status === 'IN_PROGRESS';
+  const canClose = isSupervisor && ticket && ticket.status !== 'CLOSED';
+  const canReopen = isSupervisor && ticket?.status === 'CLOSED';
 
   if (loading) {
     return <div className="p-8 text-center text-slate-500">Memuat detail tiket...</div>;
@@ -176,8 +230,8 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
       {/* Action Forms Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Assign / Reassign Staff Form - Only for Supervisors */}
-        {isSupervisor && (
+        {/* Assign / Reassign Staff Form - Only Supervisors, only OPEN/IN_PROGRESS */}
+        {canAssign && (
           <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200">
             <h3 className="text-lg font-bold text-slate-900 mb-4">Penugasan Staff</h3>
             <form onSubmit={handleAssign} className="space-y-4">
@@ -219,7 +273,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           </div>
         )}
 
-        {/* Resolve Ticket Form */}
+        {/* Resolve Ticket Form - Only for IN_PROGRESS tickets */}
         <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200">
           <h3 className="text-lg font-bold text-slate-900 mb-4">Resolusi Kendala</h3>
           {ticket.status === 'RESOLVED' || ticket.status === 'CLOSED' ? (
@@ -227,7 +281,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Catatan Resolusi Terdaftar</span>
               <p className="mt-1 text-sm text-slate-800 italic">"{ticket.resolution_note || 'Tidak ada catatan'}"</p>
             </div>
-          ) : (
+          ) : canResolve ? (
             <form onSubmit={handleResolve} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700">Catatan Resolusi Penanganan (Min. 10 Karakter)</label>
@@ -248,9 +302,44 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 {resolveLoading ? 'Memproses...' : 'Tandai Tiket Selesai (Resolve)'}
               </button>
             </form>
+          ) : (
+            <div className="rounded-lg bg-slate-50 p-4 border border-slate-200">
+              <p className="text-sm text-slate-500 italic">
+                {ticket.status === 'OPEN'
+                  ? 'Tiket belum ditugaskan ke staff. Resolusi tersedia setelah tiket dalam status IN_PROGRESS.'
+                  : 'Tiket belum dalam status yang dapat diselesaikan.'}
+              </p>
+            </div>
           )}
         </div>
       </div>
+
+      {/* Close / Reopen Actions */}
+      {(canClose || canReopen) && (
+        <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200">
+          <h3 className="text-lg font-bold text-slate-900 mb-4">Tindakan Tambahan</h3>
+          <div className="flex gap-3">
+            {canClose && (
+              <button
+                onClick={handleClose}
+                disabled={closeLoading}
+                className="rounded-lg bg-slate-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-500 disabled:opacity-50 transition-colors"
+              >
+                {closeLoading ? 'Menutup...' : 'Tutup Tiket (Close)'}
+              </button>
+            )}
+            {canReopen && (
+              <button
+                onClick={handleReopen}
+                disabled={reopenLoading}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-500 disabled:opacity-50 transition-colors"
+              >
+                {reopenLoading ? 'Membuka...' : 'Buka Kembali Tiket (Reopen)'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Timeline Audit History */}
       <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200 space-y-4">

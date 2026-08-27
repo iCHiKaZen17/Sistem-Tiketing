@@ -14,6 +14,14 @@ export async function POST(
       return createErrorResponse('UNAUTHORIZED', 'Tidak terautentikasi.', 401);
     }
 
+    // RBAC: Only assigned Staff or Supervisor can resolve
+    if (currentUser.role === 'STAFF') {
+      const detail = await TicketService.getTicketDetail(params.id, currentUser);
+      if (detail.assigned_to !== currentUser.id) {
+        return createErrorResponse('FORBIDDEN', 'Hanya petugas yang ditugaskan yang dapat menyelesaikan tiket ini.', 403);
+      }
+    }
+
     const body = await request.json();
     const validated = resolveTicketSchema.parse(body);
 
@@ -22,10 +30,12 @@ export async function POST(
       resolution_note: validated.resolution_note,
       actor_id: currentUser.id,
       actor_label: currentUser.full_name,
+      actor_role: currentUser.role,
     });
 
     return NextResponse.json(ticket, { status: 200 });
   } catch (err: any) {
-    return createErrorResponse('RESOLUTION_FAILED', err.message || 'Gagal menyelesaikan tiket', 400);
+    const status = err.message.includes('Transisi status tidak valid') ? 400 : 500;
+    return createErrorResponse('RESOLUTION_FAILED', err.message || 'Gagal menyelesaikan tiket', status);
   }
 }

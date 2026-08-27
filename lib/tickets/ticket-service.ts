@@ -135,9 +135,9 @@ export class TicketService {
 
     const currentStatus: TicketStatus = currentTicket.status;
 
-    // Check reopening permission
+    // Check reopening permission - only Supervisor can reopen CLOSED tickets
     if (currentStatus === 'CLOSED' && params.new_status === 'IN_PROGRESS') {
-      if (params.actor_role && params.actor_role !== 'SUPERVISOR') {
+      if (!params.actor_role || params.actor_role !== 'SUPERVISOR') {
         throw new Error('Hanya Supervisor yang diperbolehkan membuka kembali tiket CLOSED.');
       }
     }
@@ -188,28 +188,38 @@ export class TicketService {
 
   /**
    * Resolve ticket with resolution note validation (10 - 2000 characters).
+   * Uses updateStatus() to enforce state machine and log STATUS_CHANGE history.
    */
   static async resolveTicket(params: {
     ticket_id: string;
     resolution_note: string;
     actor_id: string;
     actor_label: string;
+    actor_role?: 'STAFF' | 'SUPERVISOR';
   }): Promise<Ticket> {
     const trimmedNote = params.resolution_note.trim();
     if (trimmedNote.length < 10 || trimmedNote.length > 2000) {
       throw new Error('Catatan resolusi harus terdiri dari 10 hingga 2000 karakter.');
     }
 
+    // 1. Validate state machine transition: only IN_PROGRESS → RESOLVED is allowed
+    const ticket = await this.updateStatus({
+      ticket_id: params.ticket_id,
+      new_status: 'RESOLVED',
+      actor_id: params.actor_id,
+      actor_label: params.actor_label,
+      actor_role: params.actor_role,
+    });
+
+    // 2. Update resolution_note and resolved_at fields
     const supabase = createAdminClient();
     const resolvedAt = new Date().toISOString();
 
     const { data: updatedTicket, error } = await supabase
       .from('tickets')
       .update({
-        status: 'RESOLVED',
         resolution_note: trimmedNote,
         resolved_at: resolvedAt,
-        updated_at: resolvedAt,
       })
       .eq('id', params.ticket_id)
       .select('*')
@@ -219,7 +229,7 @@ export class TicketService {
       throw new Error(`Gagal menyelesaikan tiket: ${error?.message}`);
     }
 
-    // Record RESOLUTION_NOTE in history
+    // 3. Record RESOLUTION_NOTE in history
     await this.appendMessage({
       ticket_id: params.ticket_id,
       entry_type: 'RESOLUTION_NOTE',
@@ -245,7 +255,7 @@ export class TicketService {
     const supabase = createAdminClient();
 
     // RBAC: Only Supervisor can assign tickets
-    if (params.assigned_by_role && params.assigned_by_role !== 'SUPERVISOR') {
+    if (!params.assigned_by_role || params.assigned_by_role !== 'SUPERVISOR') {
       throw new Error('Akses ditolak: Hanya Supervisor yang diperbolehkan menugaskan tiket.');
     }
 
@@ -270,15 +280,21 @@ export class TicketService {
       throw new Error('Tiket tidak ditemukan.');
     }
 
+    // Cannot assign tickets that are RESOLVED or CLOSED
+    if (ticket.status === 'RESOLVED' || ticket.status === 'CLOSED') {
+      throw new Error('Tiket yang sudah selesai atau ditutup tidak dapat ditugaskan.');
+    }
+
     const isReassignment = ticket.assigned_to !== null && ticket.assigned_to !== undefined;
     if (isReassignment && (!params.reason || params.reason.trim().length === 0)) {
       throw new Error('Alasan wajib diisi saat pengalihan (reassignment) petugas.');
     }
 
     const now = new Date().toISOString();
+    const isStatusChangingToInProgress = ticket.status === 'OPEN';
     const updates: Record<string, any> = {
       assigned_to: params.staff_id,
-      status: ticket.status === 'OPEN' ? 'IN_PROGRESS' : ticket.status,
+      status: isStatusChangingToInProgress ? 'IN_PROGRESS' : ticket.status,
       updated_at: now,
     };
 
@@ -297,6 +313,21 @@ export class TicketService {
       throw new Error(`Gagal menugaskan staff: ${updateError?.message}`);
     }
 
+    // Log STATUS_CHANGE if status transitioned OPEN → IN_PROGRESS
+    if (isStatusChangingToInProgress) {
+      await this.appendMessage({
+        ticket_id: params.ticket_id,
+        entry_type: 'STATUS_CHANGE',
+        content: `Status tiket diubah dari OPEN menjadi IN_PROGRESS.`,
+        actor_id: params.assigned_by_id,
+        actor_label: params.assigned_by_label,
+        metadata: {
+          previousStatus: 'OPEN',
+          newStatus: 'IN_PROGRESS',
+        },
+      });
+    }
+
     await this.appendMessage({
       ticket_id: params.ticket_id,
       entry_type: 'ASSIGNMENT_CHANGE',
@@ -313,6 +344,27 @@ export class TicketService {
     });
 
     return updatedTicket;
+  }
+
+  /**
+   * Close a ticket. Uses updateStatus() to enforce state machine.
+   * Allowed transitions: OPEN → CLOSED, IN_PROGRESS → CLOSED, RESOLVED → CLOSED.
+   */
+  static async closeTicket(params: {
+    ticket_id: string;
+    actor_id: string;
+    actor_label: string;
+    actor_role?: 'STAFF' | 'SUPERVISOR';
+    reason?: string;
+  }): Promise<Ticket> {
+    return this.updateStatus({
+      ticket_id: params.ticket_id,
+      new_status: 'CLOSED',
+      actor_id: params.actor_id,
+      actor_label: params.actor_label,
+      actor_role: params.actor_role,
+      reason: params.reason,
+    });
   }
 
   /**
