@@ -12,7 +12,12 @@ export async function GET(
   try {
     const currentUser = getAuthenticatedUser(request);
     const detail = await TicketService.getTicketDetail(params.id, currentUser);
-    return NextResponse.json(detail, { status: 200 });
+    return NextResponse.json(detail, {
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      },
+    });
   } catch (err: any) {
     const status = err.message.includes('Akses ditolak') ? 403 : 404;
     return createErrorResponse('TICKET_NOT_FOUND', err.message || 'Tiket tidak ditemukan', status);
