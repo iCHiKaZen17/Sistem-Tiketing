@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
 import { TicketSummary, TicketStatus } from '@/lib/types/ticket';
+import { authHeaders } from '@/lib/frontend/auth';
 
 export function TicketList() {
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
@@ -24,7 +25,9 @@ export function TicketList() {
       queryParams.set('page', String(page));
       queryParams.set('limit', '10');
 
-      const res = await fetch(`/api/v1/tickets?${queryParams.toString()}`);
+      const res = await fetch(`/api/v1/tickets?${queryParams.toString()}`, {
+        headers: authHeaders(),
+      });
       const data = await res.json();
 
       if (res.ok && data.data) {
@@ -32,7 +35,6 @@ export function TicketList() {
         setTotalPages(data.pagination.total_pages);
       }
     } catch {
-      // Mock tickets if offline/demo
       setTickets([]);
     } finally {
       setLoading(false);

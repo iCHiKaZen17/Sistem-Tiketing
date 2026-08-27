@@ -8,6 +8,7 @@ import {
   PaginatedResult,
   HistoryEntryType,
 } from '@/lib/types/ticket';
+import { AuthenticatedUser } from '@/lib/types/user';
 
 export class TicketService {
   /**
@@ -238,9 +239,15 @@ export class TicketService {
     staff_id: string;
     assigned_by_id?: string;
     assigned_by_label?: string;
+    assigned_by_role?: string;
     reason?: string;
   }): Promise<Ticket> {
     const supabase = createAdminClient();
+
+    // RBAC: Only Supervisor can assign tickets
+    if (params.assigned_by_role && params.assigned_by_role !== 'SUPERVISOR') {
+      throw new Error('Akses ditolak: Hanya Supervisor yang diperbolehkan menugaskan tiket.');
+    }
 
     // Verify staff exists and is active
     const { data: staffUser, error: staffError } = await supabase
@@ -311,7 +318,7 @@ export class TicketService {
   /**
    * List tickets with filtering, full-text search, and pagination.
    */
-  static async listTickets(filter: TicketFilter): Promise<PaginatedResult<any>> {
+  static async listTickets(filter: TicketFilter, currentUser?: AuthenticatedUser | null): Promise<PaginatedResult<any>> {
     const supabase = createAdminClient();
     const page = filter.page || 1;
     const limit = filter.limit || 20;
@@ -334,7 +341,10 @@ export class TicketService {
       query = query.ilike('app_name', `%${filter.app_name}%`);
     }
 
-    if (filter.assigned_to) {
+    // RBAC: Staff only sees tickets assigned to them or unassigned tickets
+    if (currentUser && currentUser.role === 'STAFF') {
+      query = query.or(`assigned_to.eq.${currentUser.id},assigned_to.is.null`);
+    } else if (filter.assigned_to) {
       query = query.eq('assigned_to', filter.assigned_to);
     }
 
@@ -398,7 +408,7 @@ export class TicketService {
   /**
    * Get full ticket details with history and attachments.
    */
-  static async getTicketDetail(ticketId: string): Promise<TicketDetail> {
+  static async getTicketDetail(ticketId: string, currentUser?: AuthenticatedUser | null): Promise<TicketDetail> {
     const supabase = createAdminClient();
 
     const { data: ticket, error: ticketError } = await supabase
@@ -409,6 +419,13 @@ export class TicketService {
 
     if (ticketError || !ticket) {
       throw new Error('Tiket tidak ditemukan.');
+    }
+
+    // RBAC: Staff can only access their own assigned tickets or unassigned tickets
+    if (currentUser && currentUser.role === 'STAFF') {
+      if (ticket.assigned_to !== null && ticket.assigned_to !== undefined && ticket.assigned_to !== currentUser.id) {
+        throw new Error('Akses ditolak: Anda tidak memiliki akses ke tiket ini.');
+      }
     }
 
     let assignedToName: string | null = null;

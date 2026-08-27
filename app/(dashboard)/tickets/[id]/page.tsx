@@ -6,12 +6,14 @@ import { StatusBadge } from '@/components/ui/badge';
 import { ErrorMessage } from '@/components/ui/error-message';
 import { TicketDetail, TicketStatus } from '@/lib/types/ticket';
 import { User } from '@/lib/types/user';
+import { authHeaders, getCurrentUser } from '@/lib/frontend/auth';
 
 export default function TicketDetailPage({ params }: { params: { id: string } }) {
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [activeStaffList, setActiveStaffList] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentUser, setCurrentUserState] = useState<ReturnType<typeof getCurrentUser>>(null);
 
   // Assignment Form State
   const [selectedStaff, setSelectedStaff] = useState('');
@@ -22,9 +24,15 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [resolutionNote, setResolutionNote] = useState('');
   const [resolveLoading, setResolveLoading] = useState(false);
 
+  useEffect(() => {
+    setCurrentUserState(getCurrentUser());
+  }, []);
+
   const fetchTicketDetail = async () => {
     try {
-      const res = await fetch(`/api/v1/tickets/${params.id}`);
+      const res = await fetch(`/api/v1/tickets/${params.id}`, {
+        headers: authHeaders(),
+      });
       const data = await res.json();
       if (res.ok) {
         setTicket(data);
@@ -64,12 +72,16 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     try {
       const res = await fetch(`/api/v1/tickets/${params.id}/assign`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
         body: JSON.stringify({ staff_id: selectedStaff, reason: assignReason }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Gagal menugaskan staff');
 
+      setSelectedStaff('');
       setAssignReason('');
       fetchTicketDetail();
     } catch (err: any) {
@@ -91,7 +103,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     try {
       const res = await fetch(`/api/v1/tickets/${params.id}/resolve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
         body: JSON.stringify({ resolution_note: resolutionNote }),
       });
       const data = await res.json();
@@ -105,6 +120,8 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       setResolveLoading(false);
     }
   };
+
+  const isSupervisor = currentUser?.role === 'SUPERVISOR';
 
   if (loading) {
     return <div className="p-8 text-center text-slate-500">Memuat detail tiket...</div>;
@@ -159,46 +176,48 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
       {/* Action Forms Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Assign / Reassign Staff Form */}
-        <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200">
-          <h3 className="text-lg font-bold text-slate-900 mb-4">Penugasan Staff</h3>
-          <form onSubmit={handleAssign} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Pilih Staff Aktif</label>
-              <select
-                value={selectedStaff}
-                onChange={(e) => setSelectedStaff(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="">-- Pilih Staff --</option>
-                {activeStaffList.map((s) => (
-                  <option key={s.id} value={s.id}>{s.full_name} ({s.username})</option>
-                ))}
-              </select>
-            </div>
-
-            {ticket.assigned_to && (
+        {/* Assign / Reassign Staff Form - Only for Supervisors */}
+        {isSupervisor && (
+          <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">Penugasan Staff</h3>
+            <form onSubmit={handleAssign} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700">Alasan Pengalihan (Reassignment)</label>
-                <input
-                  type="text"
-                  value={assignReason}
-                  onChange={(e) => setAssignReason(e.target.value)}
-                  placeholder="Contoh: Bebas beban kerja / spesialis modul"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
+                <label className="block text-sm font-medium text-slate-700">Pilih Staff Aktif</label>
+                <select
+                  value={selectedStaff}
+                  onChange={(e) => setSelectedStaff(e.target.value)}
+                  className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">-- Pilih Staff --</option>
+                  {activeStaffList.filter((s) => s.role === 'STAFF').map((s) => (
+                    <option key={s.id} value={s.id}>{s.full_name} ({s.username})</option>
+                  ))}
+                </select>
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={assignLoading || !selectedStaff}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 disabled:opacity-50 transition-colors"
-            >
-              {assignLoading ? 'Menyimpan...' : ticket.assigned_to ? 'Alihkan Petugas' : 'Tugaskan Staff'}
-            </button>
-          </form>
-        </div>
+              {ticket.assigned_to && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">Alasan Pengalihan (Reassignment)</label>
+                  <input
+                    type="text"
+                    value={assignReason}
+                    onChange={(e) => setAssignReason(e.target.value)}
+                    placeholder="Contoh: Bebas beban kerja / spesialis modul"
+                    className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={assignLoading || !selectedStaff}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 disabled:opacity-50 transition-colors"
+              >
+                {assignLoading ? 'Menyimpan...' : ticket.assigned_to ? 'Alihkan Petugas' : 'Tugaskan Staff'}
+              </button>
+            </form>
+          </div>
+        )}
 
         {/* Resolve Ticket Form */}
         <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200">
