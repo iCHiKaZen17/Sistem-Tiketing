@@ -3,12 +3,13 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { createUserSchema } from '@/lib/utils/validation';
 import { createErrorResponse } from '@/lib/utils/error-response';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const supabase = createAdminClient();
   const { data: users, error } = await supabase
     .from('users')
     .select('id, username, full_name, role, is_active')
-    .eq('is_active', true)
     .order('full_name', { ascending: true });
 
   if (error) {

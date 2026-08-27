@@ -43,7 +43,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       const res = await fetch('/api/v1/users');
       const data = await res.json();
       if (res.ok && Array.isArray(data)) {
-        setActiveStaffList(data);
+        setActiveStaffList(data.filter((u: User) => u.is_active));
       }
     } catch {
       // Ignore fallback
