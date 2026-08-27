@@ -1,0 +1,445 @@
+import { createAdminClient } from '@/lib/supabase/server';
+import { generateTicketNumber } from '@/lib/utils/ticket-number';
+import {
+  Ticket,
+  TicketDetail,
+  TicketFilter,
+  TicketStatus,
+  PaginatedResult,
+  HistoryEntryType,
+} from '@/lib/types/ticket';
+
+export class TicketService {
+  /**
+   * Allowed status transitions state machine dictionary.
+   */
+  private static VALID_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
+    OPEN: ['IN_PROGRESS', 'CLOSED'],
+    IN_PROGRESS: ['RESOLVED', 'CLOSED'],
+    RESOLVED: ['CLOSED'],
+    CLOSED: ['IN_PROGRESS'], // Only Supervisor can reopen
+  };
+
+  /**
+   * Create a new ticket and initial reporter message entry in history.
+   */
+  static async createTicket(params: {
+    reporter_id: string;
+    app_name?: string;
+    error_desc?: string;
+    repro_steps?: string;
+    wa_message_id?: string;
+  }): Promise<Ticket> {
+    const supabase = createAdminClient();
+    const ticketNumber = await generateTicketNumber();
+
+    // 1. Insert Ticket Row
+    const { data: ticket, error: ticketError } = await supabase
+      .from('tickets')
+      .insert({
+        ticket_number: ticketNumber,
+        reporter_id: params.reporter_id,
+        status: 'OPEN',
+        app_name: params.app_name || null,
+        error_desc: params.error_desc || null,
+        repro_steps: params.repro_steps || null,
+      })
+      .select('*')
+      .single();
+
+    if (ticketError || !ticket) {
+      throw new Error(`Gagal membuat tiket: ${ticketError?.message}`);
+    }
+
+    // 2. Insert initial Ticket History entry
+    const { error: historyError } = await supabase.from('ticket_history').insert({
+      ticket_id: ticket.id,
+      entry_type: 'REPORTER_MESSAGE',
+      content: params.error_desc || 'Laporan baru diterima dari WhatsApp.',
+      wa_message_id: params.wa_message_id || null,
+    });
+
+    if (historyError) {
+      console.error('Failed to record initial history entry:', historyError);
+    }
+
+    return ticket;
+  }
+
+  /**
+   * Append a new message/entry to ticket history.
+   */
+  static async appendMessage(params: {
+    ticket_id: string;
+    entry_type: HistoryEntryType;
+    content: string;
+    actor_id?: string;
+    actor_label?: string;
+    metadata?: Record<string, any>;
+    wa_message_id?: string;
+  }): Promise<void> {
+    const supabase = createAdminClient();
+
+    // Deduplication check if wa_message_id is provided
+    if (params.wa_message_id) {
+      const { data: existing } = await supabase
+        .from('ticket_history')
+        .select('id')
+        .eq('wa_message_id', params.wa_message_id)
+        .maybeSingle();
+
+      if (existing) {
+        return; // Message already recorded
+      }
+    }
+
+    const { error } = await supabase.from('ticket_history').insert({
+      ticket_id: params.ticket_id,
+      entry_type: params.entry_type,
+      content: params.content,
+      actor_id: params.actor_id || null,
+      actor_label: params.actor_label || null,
+      metadata: params.metadata || null,
+      wa_message_id: params.wa_message_id || null,
+    });
+
+    if (error) {
+      throw new Error(`Gagal menambah pesan riwayat: ${error.message}`);
+    }
+  }
+
+  /**
+   * Update ticket status with state machine enforcement.
+   */
+  static async updateStatus(params: {
+    ticket_id: string;
+    new_status: TicketStatus;
+    actor_id?: string;
+    actor_label?: string;
+    actor_role?: 'STAFF' | 'SUPERVISOR';
+    reason?: string;
+  }): Promise<Ticket> {
+    const supabase = createAdminClient();
+
+    // 1. Fetch current ticket
+    const { data: currentTicket, error: fetchError } = await supabase
+      .from('tickets')
+      .select('*')
+      .eq('id', params.ticket_id)
+      .single();
+
+    if (fetchError || !currentTicket) {
+      throw new Error('Tiket tidak ditemukan.');
+    }
+
+    const currentStatus: TicketStatus = currentTicket.status;
+
+    // Check reopening permission
+    if (currentStatus === 'CLOSED' && params.new_status === 'IN_PROGRESS') {
+      if (params.actor_role && params.actor_role !== 'SUPERVISOR') {
+        throw new Error('Hanya Supervisor yang diperbolehkan membuka kembali tiket CLOSED.');
+      }
+    }
+
+    // Check State Machine Transition
+    const allowed = this.VALID_TRANSITIONS[currentStatus];
+    if (!allowed || !allowed.includes(params.new_status)) {
+      throw new Error(`Transisi status tidak valid dari ${currentStatus} ke ${params.new_status}.`);
+    }
+
+    // Update timestamp fields
+    const updates: Record<string, any> = {
+      status: params.new_status,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (params.new_status === 'CLOSED') {
+      updates.closed_at = new Date().toISOString();
+    }
+
+    const { data: updatedTicket, error: updateError } = await supabase
+      .from('tickets')
+      .update(updates)
+      .eq('id', params.ticket_id)
+      .select('*')
+      .single();
+
+    if (updateError || !updatedTicket) {
+      throw new Error(`Gagal memperbarui status: ${updateError?.message}`);
+    }
+
+    // Log history
+    await this.appendMessage({
+      ticket_id: params.ticket_id,
+      entry_type: 'STATUS_CHANGE',
+      content: `Status tiket diubah dari ${currentStatus} menjadi ${params.new_status}.`,
+      actor_id: params.actor_id,
+      actor_label: params.actor_label,
+      metadata: {
+        previousStatus: currentStatus,
+        newStatus: params.new_status,
+        reason: params.reason || null,
+      },
+    });
+
+    return updatedTicket;
+  }
+
+  /**
+   * Resolve ticket with resolution note validation (10 - 2000 characters).
+   */
+  static async resolveTicket(params: {
+    ticket_id: string;
+    resolution_note: string;
+    actor_id: string;
+    actor_label: string;
+  }): Promise<Ticket> {
+    const trimmedNote = params.resolution_note.trim();
+    if (trimmedNote.length < 10 || trimmedNote.length > 2000) {
+      throw new Error('Catatan resolusi harus terdiri dari 10 hingga 2000 karakter.');
+    }
+
+    const supabase = createAdminClient();
+    const resolvedAt = new Date().toISOString();
+
+    const { data: updatedTicket, error } = await supabase
+      .from('tickets')
+      .update({
+        status: 'RESOLVED',
+        resolution_note: trimmedNote,
+        resolved_at: resolvedAt,
+        updated_at: resolvedAt,
+      })
+      .eq('id', params.ticket_id)
+      .select('*')
+      .single();
+
+    if (error || !updatedTicket) {
+      throw new Error(`Gagal menyelesaikan tiket: ${error?.message}`);
+    }
+
+    // Record RESOLUTION_NOTE in history
+    await this.appendMessage({
+      ticket_id: params.ticket_id,
+      entry_type: 'RESOLUTION_NOTE',
+      content: trimmedNote,
+      actor_id: params.actor_id,
+      actor_label: params.actor_label,
+    });
+
+    return updatedTicket;
+  }
+
+  /**
+   * Assign or reassign ticket to a Staff member.
+   */
+  static async assignStaff(params: {
+    ticket_id: string;
+    staff_id: string;
+    assigned_by_id?: string;
+    assigned_by_label?: string;
+    reason?: string;
+  }): Promise<Ticket> {
+    const supabase = createAdminClient();
+
+    // Verify staff exists and is active
+    const { data: staffUser, error: staffError } = await supabase
+      .from('users')
+      .select('id, full_name, is_active, role')
+      .eq('id', params.staff_id)
+      .single();
+
+    if (staffError || !staffUser || !staffUser.is_active || staffUser.role !== 'STAFF') {
+      throw new Error('Staff yang ditunjuk tidak ditemukan atau tidak aktif.');
+    }
+
+    const { data: ticket, error: ticketError } = await supabase
+      .from('tickets')
+      .select('*')
+      .eq('id', params.ticket_id)
+      .single();
+
+    if (ticketError || !ticket) {
+      throw new Error('Tiket tidak ditemukan.');
+    }
+
+    const isReassignment = ticket.assigned_to !== null && ticket.assigned_to !== undefined;
+    if (isReassignment && (!params.reason || params.reason.trim().length === 0)) {
+      throw new Error('Alasan wajib diisi saat pengalihan (reassignment) petugas.');
+    }
+
+    const now = new Date().toISOString();
+    const updates: Record<string, any> = {
+      assigned_to: params.staff_id,
+      status: ticket.status === 'OPEN' ? 'IN_PROGRESS' : ticket.status,
+      updated_at: now,
+    };
+
+    if (!ticket.first_assigned_at) {
+      updates.first_assigned_at = now;
+    }
+
+    const { data: updatedTicket, error: updateError } = await supabase
+      .from('tickets')
+      .update(updates)
+      .eq('id', params.ticket_id)
+      .select('*')
+      .single();
+
+    if (updateError || !updatedTicket) {
+      throw new Error(`Gagal menugaskan staff: ${updateError?.message}`);
+    }
+
+    await this.appendMessage({
+      ticket_id: params.ticket_id,
+      entry_type: 'ASSIGNMENT_CHANGE',
+      content: isReassignment
+        ? `Tiket dialihkan kepada ${staffUser.full_name}. Alasan: ${params.reason}`
+        : `Tiket ditugaskan kepada ${staffUser.full_name}.`,
+      actor_id: params.assigned_by_id,
+      actor_label: params.assigned_by_label,
+      metadata: {
+        previousAssignedTo: ticket.assigned_to,
+        newAssignedTo: params.staff_id,
+        reason: params.reason || null,
+      },
+    });
+
+    return updatedTicket;
+  }
+
+  /**
+   * List tickets with filtering, full-text search, and pagination.
+   */
+  static async listTickets(filter: TicketFilter): Promise<PaginatedResult<any>> {
+    const supabase = createAdminClient();
+    const page = filter.page || 1;
+    const limit = filter.limit || 20;
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabase
+      .from('tickets')
+      .select('*, reporters(name)', { count: 'exact' });
+
+    if (filter.status) {
+      if (Array.isArray(filter.status)) {
+        query = query.in('status', filter.status);
+      } else {
+        query = query.eq('status', filter.status);
+      }
+    }
+
+    if (filter.app_name) {
+      query = query.ilike('app_name', `%${filter.app_name}%`);
+    }
+
+    if (filter.assigned_to) {
+      query = query.eq('assigned_to', filter.assigned_to);
+    }
+
+    if (filter.date_from) {
+      query = query.gte('created_at', filter.date_from);
+    }
+
+    if (filter.date_to) {
+      query = query.lte('created_at', filter.date_to);
+    }
+
+    if (filter.search && filter.search.trim().length >= 3) {
+      query = query.or(`ticket_number.ilike.%${filter.search}%,error_desc.ilike.%${filter.search}%`);
+    }
+
+    query = query.order('created_at', { ascending: false }).range(from, to);
+
+    const { data, count, error } = await query;
+
+    if (error) {
+      throw new Error(`Gagal mengambil daftar tiket: ${error.message}`);
+    }
+
+    // Fetch assigned users if any
+    const assignedUserIds = Array.from(new Set((data || []).map((t: any) => t.assigned_to).filter(Boolean)));
+    let userMap: Record<string, string> = {};
+
+    if (assignedUserIds.length > 0) {
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('id, full_name')
+        .in('id', assignedUserIds);
+      if (usersData) {
+        userMap = Object.fromEntries(usersData.map((u: any) => [u.id, u.full_name]));
+      }
+    }
+
+    const formattedData = (data || []).map((t: any) => ({
+      id: t.id,
+      ticket_number: t.ticket_number,
+      reporter_name: t.reporters?.name || 'Pelapor',
+      app_name: t.app_name,
+      error_desc_summary: t.error_desc ? t.error_desc.slice(0, 150) : null,
+      status: t.status,
+      created_at: t.created_at,
+      assigned_to_name: t.assigned_to ? userMap[t.assigned_to] || 'Staff' : null,
+    }));
+
+    const totalItems = count || 0;
+    return {
+      data: formattedData,
+      pagination: {
+        page,
+        limit,
+        total_items: totalItems,
+        total_pages: Math.ceil(totalItems / limit) || 1,
+      },
+    };
+  }
+
+  /**
+   * Get full ticket details with history and attachments.
+   */
+  static async getTicketDetail(ticketId: string): Promise<TicketDetail> {
+    const supabase = createAdminClient();
+
+    const { data: ticket, error: ticketError } = await supabase
+      .from('tickets')
+      .select('*, reporters(name, phone)')
+      .eq('id', ticketId)
+      .single();
+
+    if (ticketError || !ticket) {
+      throw new Error('Tiket tidak ditemukan.');
+    }
+
+    let assignedToName: string | null = null;
+    if (ticket.assigned_to) {
+      const { data: user } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', ticket.assigned_to)
+        .maybeSingle();
+      if (user) assignedToName = user.full_name;
+    }
+
+    const { data: history } = await supabase
+      .from('ticket_history')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .order('created_at', { ascending: true });
+
+    const { data: attachments } = await supabase
+      .from('ticket_attachments')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .order('uploaded_at', { ascending: true });
+
+    return {
+      ...ticket,
+      reporter_name: ticket.reporters?.name || 'Pelapor',
+      reporter_phone: ticket.reporters?.phone || '',
+      assigned_to_name: assignedToName,
+      history: history || [],
+      attachments: attachments || [],
+    };
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "whatsapp-webhooks": {
+      "source": "hookdeck/webhook-skills",
+      "sourceType": "github",
+      "skillPath": "skills/whatsapp-webhooks/SKILL.md",
+      "computedHash": "fbf687b8a752dd5722f2c3b344b5e6cb93147a0ae636b39b2242e26827a03b9b"
+    }
+  }
+}
