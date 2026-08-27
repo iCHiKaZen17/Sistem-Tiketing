@@ -34,7 +34,8 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
   const fetchTicketDetail = async () => {
     try {
-      const res = await fetch(`/api/v1/tickets/${params.id}`, {
+      const url = `/api/v1/tickets/${params.id}?_=${Date.now()}`;
+      const res = await fetch(url, {
         headers: authHeaders(),
         cache: 'no-store',
       });
@@ -53,7 +54,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
   const fetchStaffList = async () => {
     try {
-      const res = await fetch('/api/v1/users', { cache: 'no-store' });
+      const res = await fetch(`/api/v1/users?_=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (res.ok && Array.isArray(data)) {
         setActiveStaffList(data.filter((u: User) => u.is_active));

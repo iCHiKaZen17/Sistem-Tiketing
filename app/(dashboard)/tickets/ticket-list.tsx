@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { StatusBadge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
+import { AddTicketModal } from '@/components/tickets/add-ticket-modal';
 import { TicketSummary, TicketStatus } from '@/lib/types/ticket';
-import { authHeaders } from '@/lib/frontend/auth';
+import { authHeaders, getCurrentUser } from '@/lib/frontend/auth';
 
 export function TicketList() {
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
@@ -15,6 +16,12 @@ export function TicketList() {
   const [search, setSearch] = useState<string>('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [currentUser, setCurrentUser] = useState<ReturnType<typeof getCurrentUser>>(null);
+
+  useEffect(() => {
+    setCurrentUser(getCurrentUser());
+  }, []);
 
   const fetchTickets = async () => {
     setLoading(true);
@@ -77,6 +84,14 @@ export function TicketList() {
         </form>
 
         <div className="flex items-center gap-3 shrink-0">
+          {currentUser?.role === 'SUPERVISOR' && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 transition-colors"
+            >
+              + Tambah Tiket
+            </button>
+          )}
           <label className="text-sm font-medium text-slate-600">Status:</label>
           <select
             value={statusFilter}
@@ -94,6 +109,12 @@ export function TicketList() {
           </select>
         </div>
       </div>
+
+      <AddTicketModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSuccess={fetchTickets}
+      />
 
       {/* Tickets Table */}
       <div className="overflow-hidden rounded-xl bg-white shadow-sm border border-slate-200">
