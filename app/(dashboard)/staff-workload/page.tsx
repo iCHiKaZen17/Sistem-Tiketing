@@ -50,13 +50,6 @@ export default function StaffWorkloadPage() {
     };
 
     fetchWorkload();
-
-    // Auto-refresh every 5 seconds
-    const refreshInterval = setInterval(() => {
-      fetchWorkload();
-    }, 5000);
-
-    return () => clearInterval(refreshInterval);
   }, [currentUser]);
 
   if (currentUser?.role !== 'SUPERVISOR') {
