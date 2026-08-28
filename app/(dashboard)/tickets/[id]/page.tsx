@@ -14,6 +14,8 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUserState] = useState<ReturnType<typeof getCurrentUser>>(null);
+  const [lastStatus, setLastStatus] = useState<string | null>(null);
+  const [statusChangeNotif, setStatusChangeNotif] = useState<string | null>(null);
 
   // Assignment Form State
   const [selectedStaff, setSelectedStaff] = useState('');
@@ -41,6 +43,13 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       });
       const data = await res.json();
       if (res.ok) {
+        // Check for status changes
+        if (lastStatus && data.status !== lastStatus && data.status !== ticket?.status) {
+          setStatusChangeNotif(`Status tiket berubah dari "${lastStatus}" menjadi "${data.status}"`);
+          setTimeout(() => setStatusChangeNotif(null), 3000);
+        }
+        
+        setLastStatus(data.status);
         setTicket(data);
       } else {
         setError(data.message || 'Tiket tidak ditemukan');
@@ -67,6 +76,13 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   useEffect(() => {
     fetchTicketDetail();
     fetchStaffList();
+
+    // Auto-refresh every 5 seconds to keep data in sync
+    const refreshInterval = setInterval(() => {
+      fetchTicketDetail();
+    }, 5000);
+
+    return () => clearInterval(refreshInterval);
   }, [params.id]);
 
   const handleAssign = async (e: React.FormEvent) => {
@@ -203,6 +219,18 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       </div>
 
       <ErrorMessage message={error} />
+
+      {/* Status Change Notification */}
+      {statusChangeNotif && (
+        <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm font-medium text-blue-800">{statusChangeNotif}</span>
+          </div>
+        </div>
+      )}
 
       {/* Ticket Overview Card */}
       <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200 space-y-4">
