@@ -9,10 +9,17 @@ import { AddTicketModal } from '@/components/tickets/add-ticket-modal';
 import { TicketSummary, TicketStatus } from '@/lib/types/ticket';
 import { authHeaders, getCurrentUser } from '@/lib/frontend/auth';
 
+interface StaffOption {
+  id: string;
+  full_name: string;
+}
+
 export function TicketList() {
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [staffFilter, setStaffFilter] = useState<string>('');
+  const [staffList, setStaffList] = useState<StaffOption[]>([]);
   const [search, setSearch] = useState<string>('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -23,11 +30,27 @@ export function TicketList() {
     setCurrentUser(getCurrentUser());
   }, []);
 
+  useEffect(() => {
+    const fetchStaff = async () => {
+      try {
+        const res = await fetch('/api/v1/users', { headers: authHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          setStaffList(data.filter((u: any) => u.role === 'STAFF' && u.is_active));
+        }
+      } catch {
+        // ignore
+      }
+    };
+    fetchStaff();
+  }, []);
+
   const fetchTickets = async () => {
     setLoading(true);
     try {
       const queryParams = new URLSearchParams();
       if (statusFilter) queryParams.set('status', statusFilter);
+      if (staffFilter) queryParams.set('assigned_to', staffFilter);
       if (search.trim().length >= 3) queryParams.set('search', search.trim());
       queryParams.set('page', String(page));
       queryParams.set('limit', '10');
@@ -50,7 +73,7 @@ export function TicketList() {
 
   useEffect(() => {
     fetchTickets();
-  }, [statusFilter, page]);
+  }, [statusFilter, staffFilter, page]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,7 +106,7 @@ export function TicketList() {
           </button>
         </form>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
           {currentUser?.role === 'SUPERVISOR' && (
             <button
               onClick={() => setShowAddModal(true)}
@@ -92,21 +115,43 @@ export function TicketList() {
               + Tambah Tiket
             </button>
           )}
-          <label className="text-sm font-medium text-slate-600">Status:</label>
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(1);
-            }}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">Semua Status</option>
-            <option value="OPEN">OPEN</option>
-            <option value="IN_PROGRESS">IN PROGRESS</option>
-            <option value="RESOLVED">RESOLVED</option>
-            <option value="CLOSED">CLOSED</option>
-          </select>
+
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-slate-600">Petugas:</label>
+            <select
+              value={staffFilter}
+              onChange={(e) => {
+                setStaffFilter(e.target.value);
+                setPage(1);
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">Semua Petugas</option>
+              {staffList.map((staff) => (
+                <option key={staff.id} value={staff.id}>
+                  {staff.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-slate-600">Status:</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">Semua Status</option>
+              <option value="OPEN">OPEN</option>
+              <option value="IN_PROGRESS">IN PROGRESS</option>
+              <option value="RESOLVED">RESOLVED</option>
+              <option value="CLOSED">CLOSED</option>
+            </select>
+          </div>
         </div>
       </div>
 
