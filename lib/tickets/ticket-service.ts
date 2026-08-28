@@ -408,8 +408,41 @@ export class TicketService {
       query = query.lte('created_at', filter.date_to);
     }
 
+    // Enhanced search: ticket_number, error_desc, app_name, reporter name
     if (filter.search && filter.search.trim().length >= 3) {
-      query = query.or(`ticket_number.ilike.%${filter.search}%,error_desc.ilike.%${filter.search}%`);
+      const searchTerm = filter.search.trim();
+
+      // Find matching reporter IDs by name
+      const { data: matchingReporters } = await supabase
+        .from('reporters')
+        .select('id')
+        .ilike('name', `%${searchTerm}%`);
+
+      // Find matching staff IDs by name
+      const { data: matchingStaff } = await supabase
+        .from('users')
+        .select('id')
+        .ilike('full_name', `%${searchTerm}%`);
+
+      const reporterIds = (matchingReporters || []).map((r: any) => r.id);
+      const staffIds = (matchingStaff || []).map((u: any) => u.id);
+
+      // Construct OR filter
+      const conditions: string[] = [
+        `ticket_number.ilike.%${searchTerm}%`,
+        `error_desc.ilike.%${searchTerm}%`,
+        `app_name.ilike.%${searchTerm}%`,
+      ];
+
+      if (reporterIds.length > 0) {
+        conditions.push(`reporter_id.in.(${reporterIds.join(',')})`);
+      }
+
+      if (staffIds.length > 0) {
+        conditions.push(`assigned_to.in.(${staffIds.join(',')})`);
+      }
+
+      query = query.or(conditions.join(','));
     }
 
     query = query.order('created_at', { ascending: false }).range(from, to);
@@ -434,7 +467,7 @@ export class TicketService {
       }
     }
 
-    const formattedData = (data || []).map((t: any) => ({
+    let formattedData = (data || []).map((t: any) => ({
       id: t.id,
       ticket_number: t.ticket_number,
       reporter_name: t.reporters?.name || 'Pelapor',
@@ -444,6 +477,18 @@ export class TicketService {
       created_at: t.created_at,
       assigned_to_name: t.assigned_to ? userMap[t.assigned_to] || 'Staff' : null,
     }));
+
+    // Additional client-side filter as safety net for reporter/staff name search
+    if (filter.search && filter.search.trim().length >= 3) {
+      const searchTerm = filter.search.toLowerCase().trim();
+      formattedData = formattedData.filter((t: any) =>
+        t.ticket_number?.toLowerCase().includes(searchTerm) ||
+        t.error_desc_summary?.toLowerCase().includes(searchTerm) ||
+        t.app_name?.toLowerCase().includes(searchTerm) ||
+        t.reporter_name?.toLowerCase().includes(searchTerm) ||
+        t.assigned_to_name?.toLowerCase().includes(searchTerm)
+      );
+    }
 
     const totalItems = count || 0;
     return {

@@ -76,13 +76,6 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   useEffect(() => {
     fetchTicketDetail();
     fetchStaffList();
-
-    // Auto-refresh every 5 seconds to keep data in sync
-    const refreshInterval = setInterval(() => {
-      fetchTicketDetail();
-    }, 5000);
-
-    return () => clearInterval(refreshInterval);
   }, [params.id]);
 
   const handleAssign = async (e: React.FormEvent) => {

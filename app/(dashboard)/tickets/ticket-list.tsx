@@ -73,13 +73,6 @@ export function TicketList() {
 
   useEffect(() => {
     fetchTickets();
-
-    // Auto-refresh every 5 seconds to keep list synchronized
-    const refreshInterval = setInterval(() => {
-      fetchTickets();
-    }, 5000);
-
-    return () => clearInterval(refreshInterval);
   }, [statusFilter, staffFilter, page]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
