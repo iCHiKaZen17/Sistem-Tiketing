@@ -4,6 +4,8 @@ import { createErrorResponse } from '@/lib/utils/error-response';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 export async function GET(request: NextRequest) {
   try {
@@ -57,7 +59,14 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    return NextResponse.json(workloadData, { status: 200 });
+    return NextResponse.json(workloadData, { 
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    });
   } catch (err: any) {
     return createErrorResponse('FETCH_WORKLOAD_FAILED', err.message || 'Gagal mengambil data beban kerja', 500);
   }
