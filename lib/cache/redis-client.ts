@@ -1,6 +1,11 @@
 import { Redis } from '@upstash/redis';
 
-export const redisClient = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL || 'https://mock-redis.upstash.io',
-  token: process.env.UPSTASH_REDIS_REST_TOKEN || 'mock-redis-token',
-});
+let client: Redis | null | undefined;
+
+export function getRedisClient(): Redis | null {
+  if (client !== undefined) return client;
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  client = url && token && !url.includes('mock-redis') ? new Redis({ url, token }) : null;
+  return client;
+}

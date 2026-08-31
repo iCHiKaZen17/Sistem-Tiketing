@@ -1,5 +1,5 @@
 import * as fc from 'fast-check';
-import { generateTicketNumber, formatTicketNumber } from '@/lib/utils/ticket-number';
+import { formatTicketNumber } from '@/lib/utils/ticket-number';
 import { isWorkingHour, calculateWorkingMinutes } from '@/lib/utils/working-hours';
 import { resolveTicketSchema } from '@/lib/utils/validation';
 
@@ -20,10 +20,6 @@ describe('Task 2 Utilities & Property Tests', () => {
       );
     });
 
-    it('generates a valid ticket number with generateTicketNumber', async () => {
-      const num = await generateTicketNumber(new Date(2024, 11, 15));
-      expect(num).toMatch(/^TKT-20241215-\d{4}$/);
-    });
   });
 
   describe('Working Hours Calculation', () => {

@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server';
 import { NotificationEvent } from '@/lib/types/notification';
+import { log } from '@/lib/observability/logger';
 
 export class NotificationService {
   /**
@@ -8,7 +9,8 @@ export class NotificationService {
   static async notifyUser(
     userId: string,
     eventType: string,
-    payload: Record<string, any>
+    payload: Record<string, any>,
+    dedupeKey?: string,
   ): Promise<NotificationEvent | null> {
     const supabase = createAdminClient();
 
@@ -26,18 +28,20 @@ export class NotificationService {
       if (eventType === 'STALE_TICKET_REMINDER' && !pref.stale_ticket_reminder) return null;
     }
 
-    const { data: notif, error } = await supabase
+    const query = supabase
       .from('notifications')
-      .insert({
+      .upsert({
         user_id: userId,
         event_type: eventType,
         payload,
-      })
+        dedupe_key: dedupeKey || null,
+      }, { onConflict: 'user_id,dedupe_key', ignoreDuplicates: Boolean(dedupeKey) })
       .select('*')
       .single();
+    const { data: notif, error } = await query;
 
     if (error || !notif) {
-      console.error('Failed to create notification:', error);
+      log('error', 'notification_create_failed', { userId, eventType, message: error?.message });
       return null;
     }
 
@@ -47,7 +51,7 @@ export class NotificationService {
   /**
    * Broadcast notification to all active Supervisors.
    */
-  static async broadcastToSupervisors(eventType: string, payload: Record<string, any>): Promise<void> {
+  static async broadcastToSupervisors(eventType: string, payload: Record<string, any>, dedupeKey?: string): Promise<void> {
     const supabase = createAdminClient();
     const { data: supervisors } = await supabase
       .from('users')
@@ -57,7 +61,7 @@ export class NotificationService {
 
     if (supervisors) {
       for (const sup of supervisors) {
-        await this.notifyUser(sup.id, eventType, payload);
+        await this.notifyUser(sup.id, eventType, payload, dedupeKey);
       }
     }
   }
@@ -65,13 +69,13 @@ export class NotificationService {
   /**
    * Broadcast notification to all active users (Staff & Supervisor).
    */
-  static async broadcastToAll(eventType: string, payload: Record<string, any>): Promise<void> {
+  static async broadcastToAll(eventType: string, payload: Record<string, any>, dedupeKey?: string): Promise<void> {
     const supabase = createAdminClient();
     const { data: users } = await supabase.from('users').select('id').eq('is_active', true);
 
     if (users) {
       for (const user of users) {
-        await this.notifyUser(user.id, eventType, payload);
+        await this.notifyUser(user.id, eventType, payload, dedupeKey);
       }
     }
   }

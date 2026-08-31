@@ -6,7 +6,8 @@ import { StatusBadge } from '@/components/ui/badge';
 import { ErrorMessage } from '@/components/ui/error-message';
 import { TicketDetail, TicketStatus } from '@/lib/types/ticket';
 import { User } from '@/lib/types/user';
-import { authHeaders, getCurrentUser } from '@/lib/frontend/auth';
+import { authHeaders, getCurrentUser, fetchCurrentUser } from '@/lib/frontend/auth';
+import { useTicketEvents } from '@/lib/frontend/use-ticket-events';
 
 export default function TicketDetailPage({ params }: { params: { id: string } }) {
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
@@ -29,9 +30,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   // Close/Reopen State
   const [closeLoading, setCloseLoading] = useState(false);
   const [reopenLoading, setReopenLoading] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [claimLoading, setClaimLoading] = useState(false);
 
   useEffect(() => {
-    setCurrentUserState(getCurrentUser());
+    fetchCurrentUser().then(setCurrentUserState);
   }, []);
 
   const fetchTicketDetail = async () => {
@@ -60,6 +63,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       setLoading(false);
     }
   };
+  const realtimeConnected = useTicketEvents(fetchTicketDetail);
 
   const fetchStaffList = async () => {
     try {
@@ -182,6 +186,30 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     }
   };
 
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadLoading(true); setError(null);
+    const body = new FormData(); body.append('file', file);
+    try {
+      const res = await fetch(`/api/v1/tickets/${params.id}/attachments`, { method: 'POST', body });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Gagal mengunggah lampiran');
+      await fetchTicketDetail();
+    } catch (err: any) { setError(err.message); }
+    finally { setUploadLoading(false); e.target.value = ''; }
+  };
+  const handleClaim = async () => {
+    setClaimLoading(true); setError(null);
+    try {
+      const res = await fetch(`/api/v1/tickets/${params.id}/claim`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Gagal mengklaim tiket');
+      await fetchTicketDetail();
+    } catch (err: any) { setError(err.message); }
+    finally { setClaimLoading(false); }
+  };
+
   const isSupervisor = currentUser?.role === 'SUPERVISOR';
   const canAssign = isSupervisor && (ticket?.status === 'OPEN' || ticket?.status === 'IN_PROGRESS');
   const canResolve = ticket?.status === 'IN_PROGRESS';
@@ -203,6 +231,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
   return (
     <div className="space-y-6">
+      {!realtimeConnected && <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">Koneksi realtime terputus. Polling setiap 30 detik aktif.</div>}
       {/* Top Header & Breadcrumb */}
       <div className="flex items-center justify-between">
         <Link href="/tickets" className="text-sm font-semibold text-blue-600 hover:text-blue-800">
@@ -212,6 +241,12 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       </div>
 
       <ErrorMessage message={error} />
+
+      {currentUser?.role === 'STAFF' && ticket.status === 'OPEN' && !ticket.assigned_to && (
+        <button onClick={handleClaim} disabled={claimLoading} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          {claimLoading ? 'Mengklaim...' : 'Klaim Tiket Ini'}
+        </button>
+      )}
 
       {/* Status Change Notification */}
       {statusChangeNotif && (
@@ -365,6 +400,24 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       )}
 
       {/* Timeline Audit History */}
+      <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200 space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <h3 className="text-lg font-bold text-slate-900">Lampiran</h3>
+          <label className="cursor-pointer rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">
+            {uploadLoading ? 'Mengunggah...' : 'Tambah Lampiran'}
+            <input type="file" className="hidden" disabled={uploadLoading} onChange={handleUpload} accept="image/jpeg,image/png,image/gif,application/pdf,.doc,.docx" />
+          </label>
+        </div>
+        {ticket.attachments.length === 0 ? <p className="text-sm text-slate-500">Belum ada lampiran.</p> : (
+          <ul className="divide-y divide-slate-100">{ticket.attachments.map((item) => (
+            <li key={item.id} className="py-3 flex justify-between gap-4 text-sm">
+              <span className="truncate">{item.filename} ({Math.ceil(item.file_size / 1024)} KB)</span>
+              <a className="font-semibold text-blue-600" href={`/api/v1/tickets/${params.id}/attachments/${item.id}`} target="_blank" rel="noreferrer">Buka</a>
+            </li>
+          ))}</ul>
+        )}
+      </div>
+
       <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200 space-y-4">
         <h3 className="text-lg font-bold text-slate-900">Riwayat Kronologis & Percakapan</h3>
         <div className="space-y-4 pt-2">

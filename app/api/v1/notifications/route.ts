@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { createErrorResponse } from '@/lib/utils/error-response';
+import { getAuthenticatedUser } from '@/lib/auth/get-user';
 
 export async function GET(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get('user_id');
-  if (!userId) {
-    return createErrorResponse('MISSING_USER_ID', 'Parameter user_id wajib diisi', 400);
-  }
+  const user = await getAuthenticatedUser(request);
+  if (!user) return createErrorResponse('UNAUTHORIZED', 'Sesi tidak valid.', 401);
+  const userId = user.id;
 
   const supabase = createAdminClient();
   const { data: notifications, error } = await supabase

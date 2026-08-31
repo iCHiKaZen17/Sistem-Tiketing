@@ -111,6 +111,34 @@ export default function ReportsPage() {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <section className="rounded-xl bg-white p-6 shadow-sm border border-slate-200">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Tiket per Status</h2>
+              <dl className="mt-4 space-y-3">
+                {Object.entries(summary.by_status).map(([status, count]) => (
+                  <div key={status} className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <dt className="text-sm text-slate-600">{status.replace('_', ' ')}</dt>
+                    <dd className="font-bold text-slate-900">{count}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+
+            <section className="rounded-xl bg-white p-6 shadow-sm border border-slate-200">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Tiket per Staff</h2>
+              <dl className="mt-4 space-y-3">
+                {Object.entries(summary.by_staff).length === 0 ? (
+                  <div className="text-sm text-slate-500">Belum ada data Staff pada periode ini.</div>
+                ) : Object.entries(summary.by_staff).map(([staff, count]) => (
+                  <div key={staff} className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <dt className="text-sm text-slate-600">{staff}</dt>
+                    <dd className="font-bold text-slate-900">{count}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          </div>
+
           {/* Top Apps Table */}
           <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-4 border-b border-slate-200 bg-slate-50">

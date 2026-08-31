@@ -1,17 +1,15 @@
 import { AuthenticatedUser } from '@/lib/types/user';
 
-/**
- * Get current authenticated user from localStorage.
- */
-export function getCurrentUser(): AuthenticatedUser | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const saved = localStorage.getItem('user');
-    if (saved) return JSON.parse(saved);
-  } catch {
-    // ignore
-  }
-  return null;
+let cachedUser: AuthenticatedUser | null = null;
+
+export function getCurrentUser(): AuthenticatedUser | null { return cachedUser; }
+
+export async function fetchCurrentUser(): Promise<AuthenticatedUser | null> {
+  const response = await fetch('/api/auth/me', { cache: 'no-store' });
+  if (!response.ok) return null;
+  const data = await response.json();
+  cachedUser = data.user;
+  return cachedUser;
 }
 
 /**
@@ -19,7 +17,5 @@ export function getCurrentUser(): AuthenticatedUser | null {
  * The server uses this to identify the caller for RBAC enforcement.
  */
 export function authHeaders(): Record<string, string> {
-  const user = getCurrentUser();
-  if (!user) return {};
-  return { 'x-user-data': JSON.stringify(user) };
+  return {};
 }

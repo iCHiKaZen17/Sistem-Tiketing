@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { createErrorResponse } from '@/lib/utils/error-response';
+import { getAuthenticatedUser } from '@/lib/auth/get-user';
 
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json();
-    if (!body.user_id) {
-      return createErrorResponse('MISSING_USER_ID', 'Field user_id wajib diisi', 400);
-    }
+    const user = await getAuthenticatedUser(request);
+    if (!user) return createErrorResponse('UNAUTHORIZED', 'Sesi tidak valid.', 401);
 
     const supabase = createAdminClient();
     const { error } = await supabase
       .from('notifications')
       .update({ is_read: true })
-      .eq('user_id', body.user_id)
+      .eq('user_id', user.id)
       .eq('is_read', false);
 
     if (error) {

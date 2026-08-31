@@ -10,3 +10,4 @@ process.env.UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL || 'http
 process.env.UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || 'mock-redis-token';
 process.env.QSTASH_URL = process.env.QSTASH_URL || 'https://qstash.upstash.io';
 process.env.QSTASH_TOKEN = process.env.QSTASH_TOKEN || 'mock-qstash-token';
+process.env.AUTH_SESSION_SECRET = process.env.AUTH_SESSION_SECRET || 'test-session-secret-that-is-at-least-32-characters';

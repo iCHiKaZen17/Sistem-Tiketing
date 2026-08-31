@@ -9,7 +9,7 @@ export const fetchCache = 'force-no-store';
 
 export async function GET(request: NextRequest) {
   try {
-    const currentUser = getAuthenticatedUser(request);
+    const currentUser = await getAuthenticatedUser(request);
     if (!currentUser || currentUser.role !== 'SUPERVISOR') {
       return createErrorResponse('FORBIDDEN', 'Hanya Supervisor yang dapat mengakses laporan beban kerja.', 403);
     }

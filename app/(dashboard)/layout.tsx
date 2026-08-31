@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { AuthenticatedUser } from '@/lib/types/user';
+import { fetchCurrentUser } from '@/lib/frontend/auth';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -12,22 +13,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('user');
-    if (saved) {
-      try {
-        setCurrentUser(JSON.parse(saved));
-      } catch {
-        // Default fallback mock user if no session
-        setCurrentUser({ id: 'user-1', username: 'admin', full_name: 'Administrator', role: 'SUPERVISOR' });
-      }
-    } else {
-      setCurrentUser({ id: 'user-1', username: 'admin', full_name: 'Administrator', role: 'SUPERVISOR' });
-    }
-  }, []);
+    fetchCurrentUser().then((user) => {
+      if (!user) router.replace('/login');
+      else setCurrentUser(user);
+    });
+  }, [router]);
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
-    localStorage.removeItem('user');
     router.push('/login');
   };
 

@@ -1,6 +1,6 @@
-import { createAdminClient, createClient } from '@/lib/supabase/server';
-import { redisClient } from '@/lib/cache/redis-client';
-import { AuthenticatedUser, AuthTokens } from '@/lib/types/user';
+import { createAdminClient } from '@/lib/supabase/server';
+import { AuthenticatedUser } from '@/lib/types/user';
+import { hashPassword, isHashedPassword, verifyPassword } from './password';
 
 export class AuthService {
   private static MAX_FAILED_ATTEMPTS = 5;
@@ -10,7 +10,7 @@ export class AuthService {
    * Log in user with username and password.
    * Enforces 15-minute lockout after 5 consecutive failed attempts.
    */
-  static async login(username: string, password_hash: string): Promise<AuthTokens> {
+  static async login(username: string, password: string, context: { ip?: string; userAgent?: string } = {}): Promise<AuthenticatedUser> {
     const supabase = createAdminClient();
 
     // 1. Fetch user by username from Supabase DB
@@ -21,47 +21,35 @@ export class AuthService {
       .single();
 
     if (userError || !user || !user.is_active) {
+      await this.audit(username, 'LOGIN_FAILED', context);
       throw new Error('Username atau password tidak valid, atau akun tidak aktif.');
     }
 
-    const userId = user.id;
-    const lockoutKey = `lockout:${userId}`;
-
-    // 2. Check Redis Lockout
-    try {
-      const failedCountRaw = await redisClient.get(lockoutKey);
-      const failedCount = Number(failedCountRaw || 0);
-      if (failedCount >= this.MAX_FAILED_ATTEMPTS) {
-        throw new Error('Akun terkunci sementara karena 5 kali gagal login. Silakan coba lagi dalam 15 menit.');
-      }
-    } catch (err: any) {
-      if (err.message?.includes('terkunci')) {
-        throw err;
-      }
+    if (user.locked_until && new Date(user.locked_until) > new Date()) {
+      await this.audit(username, 'LOGIN_LOCKED', context, user.id);
+      throw new Error('Akun terkunci sementara karena 5 kali gagal login. Silakan coba lagi dalam 15 menit.');
     }
 
     // 3. Authenticate with password check or Supabase Auth
-    const isPasswordValid = user.password_hash === password_hash;
+    // Legacy plaintext rows are accepted once, then transparently migrated.
+    const isPasswordValid = isHashedPassword(user.password_hash)
+      ? await verifyPassword(password, user.password_hash)
+      : user.password_hash === password;
 
     if (!isPasswordValid) {
-      // Record failed attempt in Redis
-      try {
-        const newCount = await redisClient.incr(lockoutKey);
-        if (Number(newCount) === 1) {
-          await redisClient.expire(lockoutKey, this.LOCKOUT_TTL_SECONDS);
-        }
-      } catch {
-        // Ignore redis error in offline/mock environment
-      }
-
+      const failedCount = Number(user.failed_login_count || 0) + 1;
+      await supabase.from('users').update({
+        failed_login_count: failedCount,
+        locked_until: failedCount >= this.MAX_FAILED_ATTEMPTS ? new Date(Date.now() + this.LOCKOUT_TTL_SECONDS * 1000).toISOString() : null,
+      }).eq('id', user.id);
+      await this.audit(username, failedCount >= this.MAX_FAILED_ATTEMPTS ? 'LOGIN_LOCKED' : 'LOGIN_FAILED', context, user.id);
       throw new Error('Username atau password tidak valid.');
     }
 
-    // 4. Reset lockout counter on success
-    try {
-      await redisClient.del(lockoutKey);
-    } catch {
-      // Ignore redis error
+    await supabase.from('users').update({ failed_login_count: 0, locked_until: null }).eq('id', user.id);
+
+    if (!isHashedPassword(user.password_hash)) {
+      await supabase.from('users').update({ password_hash: await hashPassword(password) }).eq('id', user.id);
     }
 
     const authenticatedUser: AuthenticatedUser = {
@@ -71,37 +59,23 @@ export class AuthService {
       role: user.role,
     };
 
-    return {
-      access_token: `mock_token_${user.id}`,
-      refresh_token: `mock_refresh_${user.id}`,
-      user: authenticatedUser,
-    };
+    await this.audit(username, 'LOGIN_SUCCEEDED', context, user.id);
+    return authenticatedUser;
   }
 
-  /**
-   * Log out user session.
-   */
-  static async logout(): Promise<void> {
-    const supabase = await createClient();
-    await supabase.auth.signOut();
+  static async auditLogout(user: AuthenticatedUser, context: { ip?: string; userAgent?: string } = {}): Promise<void> {
+    await this.audit(user.username, 'LOGOUT', context, user.id);
   }
 
-  /**
-   * Validates session token and returns AuthenticatedUser.
-   */
-  static async validateSession(): Promise<AuthenticatedUser | null> {
-    const supabase = await createClient();
-    const { data: { user }, error } = await supabase.auth.getUser();
-
-    if (error || !user) {
-      return null;
-    }
-
-    return {
-      id: user.id,
-      username: user.user_metadata?.username || user.email?.split('@')[0] || '',
-      full_name: user.user_metadata?.full_name || '',
-      role: user.user_metadata?.role || 'STAFF',
-    };
+  private static async audit(username: string, eventType: string, context: { ip?: string; userAgent?: string }, userId?: string): Promise<void> {
+    try {
+      await createAdminClient().from('auth_audit_logs').insert({
+        user_id: userId || null,
+        username: username.slice(0, 100),
+        event_type: eventType,
+        ip_address: context.ip?.slice(0, 100) || null,
+        user_agent: context.userAgent?.slice(0, 500) || null,
+      });
+    } catch { /* Audit outage must not disclose or block authentication. */ }
   }
 }

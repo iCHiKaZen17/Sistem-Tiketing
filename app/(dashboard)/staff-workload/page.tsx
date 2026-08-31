@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { authHeaders, getCurrentUser } from '@/lib/frontend/auth';
+import { authHeaders, getCurrentUser, fetchCurrentUser } from '@/lib/frontend/auth';
 
 interface StaffWorkload {
   staff_id: string;
@@ -20,8 +20,7 @@ export default function StaffWorkloadPage() {
   const [currentUser, setCurrentUser] = useState<ReturnType<typeof getCurrentUser>>(null);
 
   useEffect(() => {
-    const user = getCurrentUser();
-    setCurrentUser(user);
+    fetchCurrentUser().then(setCurrentUser);
   }, []);
 
   useEffect(() => {
@@ -65,7 +64,7 @@ export default function StaffWorkloadPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Beban Kerja Petugas</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Staff Workload</h1>
         <p className="mt-1 text-sm text-slate-500">Pantau jumlah tiket yang sedang ditangani oleh setiap anggota staff.</p>
       </div>
 
@@ -77,7 +76,7 @@ export default function StaffWorkloadPage() {
 
       {loading ? (
         <div className="rounded-xl bg-white p-8 shadow-sm border border-slate-200 text-center">
-          <p className="text-slate-500">Memuat data beban kerja...</p>
+          <p className="text-slate-500">Memuat Staff Workload...</p>
         </div>
       ) : workload.length === 0 ? (
         <div className="rounded-xl bg-white p-8 shadow-sm border border-slate-200 text-center">

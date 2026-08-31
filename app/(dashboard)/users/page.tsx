@@ -15,6 +15,8 @@ export default function UserManagementPage() {
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<UserRole>('STAFF');
   const [createLoading, setCreateLoading] = useState(false);
+  const [resetUserId, setResetUserId] = useState('');
+  const [newPassword, setNewPassword] = useState('');
 
   const fetchUsers = async () => {
     try {
@@ -72,6 +74,14 @@ export default function UserManagementPage() {
     }
   };
 
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault(); setError(null);
+    const res = await fetch(`/api/v1/users/${resetUserId}/password`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: newPassword }) });
+    const data = await res.json();
+    if (!res.ok) return setError(data.message || 'Gagal mereset password');
+    setResetUserId(''); setNewPassword('');
+  };
+
   return (
     <div className="space-y-8">
       <div>
@@ -117,7 +127,7 @@ export default function UserManagementPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minimal 6 karakter"
+                placeholder="Minimal 10 karakter"
                 className="mt-1 block w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
               />
             </div>
@@ -185,12 +195,18 @@ export default function UserManagementPage() {
                       >
                         {u.is_active ? 'Nonaktifkan' : 'Aktifkan'}
                       </button>
+                      <button onClick={() => setResetUserId(u.id)} className="ml-3 text-xs font-semibold text-blue-600 hover:underline">Reset Password</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
+          {resetUserId && <form onSubmit={handleResetPassword} className="flex gap-2 border-t border-slate-200 p-4">
+            <input type="password" minLength={10} required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Password baru, min. 10 karakter" className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <button className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Simpan</button>
+            <button type="button" onClick={() => { setResetUserId(''); setNewPassword(''); }} className="px-3 py-2 text-sm">Batal</button>
+          </form>}
         </div>
       </div>
     </div>

@@ -40,7 +40,7 @@ export const ticketFilterSchema = z.object({
 
 export const createUserSchema = z.object({
   username: z.string().min(3).max(100),
-  password: z.string().min(6, 'Password minimal 6 karakter'),
+  password: z.string().min(10, 'Password minimal 10 karakter').max(128),
   full_name: z.string().min(1).max(200),
   role: z.enum(['STAFF', 'SUPERVISOR']),
 });

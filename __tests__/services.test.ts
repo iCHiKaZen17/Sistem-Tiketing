@@ -21,5 +21,10 @@ describe('Tasks 5-10: Backend Core Services Tests', () => {
       expect(invalidType.valid).toBe(false);
       expect(invalidType.error).toContain('tidak didukung');
     });
+
+    it('rejects spoofed file content', () => {
+      expect(AttachmentService.hasValidSignature('application/pdf', new TextEncoder().encode('%PDF-1.7'))).toBe(true);
+      expect(AttachmentService.hasValidSignature('application/pdf', new TextEncoder().encode('not a pdf'))).toBe(false);
+    });
   });
 });

@@ -7,7 +7,7 @@ export default function HomePage() {
         WhatsApp Ticketing System
       </h1>
       <p className="mt-4 text-lg text-slate-600 max-w-xl">
-        Sistem manajemen tiket laporan kendala aplikasi internal terintegrasi WhatsApp Bot, Supabase, dan Upstash.
+        Sistem manajemen tiket laporan kendala aplikasi internal.
       </p>
       <div className="mt-8 flex gap-4">
         <Link

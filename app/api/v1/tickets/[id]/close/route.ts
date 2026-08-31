@@ -8,9 +8,12 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const currentUser = getAuthenticatedUser(request);
+    const currentUser = await getAuthenticatedUser(request);
     if (!currentUser) {
       return createErrorResponse('UNAUTHORIZED', 'Tidak terautentikasi.', 401);
+    }
+    if (currentUser.role !== 'SUPERVISOR') {
+      return createErrorResponse('FORBIDDEN', 'Hanya Supervisor yang dapat menutup tiket.', 403);
     }
 
     const body = await request.json().catch(() => ({}));

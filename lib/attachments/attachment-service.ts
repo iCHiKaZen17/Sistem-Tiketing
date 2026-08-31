@@ -37,6 +37,17 @@ export class AttachmentService {
     return { valid: true, category: config.category };
   }
 
+  static hasValidSignature(mimeType: string, bytes: Uint8Array): boolean {
+    const starts = (...signature: number[]) => signature.every((value, index) => bytes[index] === value);
+    if (mimeType === 'image/jpeg') return starts(0xff, 0xd8, 0xff);
+    if (mimeType === 'image/png') return starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+    if (mimeType === 'image/gif') return new TextDecoder().decode(bytes.slice(0, 6)) === 'GIF87a' || new TextDecoder().decode(bytes.slice(0, 6)) === 'GIF89a';
+    if (mimeType === 'application/pdf') return new TextDecoder().decode(bytes.slice(0, 5)) === '%PDF-';
+    if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return starts(0x50, 0x4b, 0x03, 0x04);
+    if (mimeType === 'application/msword') return starts(0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1);
+    return false;
+  }
+
   /**
    * Save attachment record to Supabase DB table `ticket_attachments`.
    */

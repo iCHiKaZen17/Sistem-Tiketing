@@ -9,10 +9,7 @@ export default function NotificationsPage() {
 
   const fetchNotifications = async () => {
     try {
-      const savedUser = localStorage.getItem('user');
-      const userId = savedUser ? JSON.parse(savedUser).id : 'user-1';
-
-      const res = await fetch(`/api/v1/notifications?user_id=${userId}`);
+      const res = await fetch('/api/v1/notifications');
       const data = await res.json();
       if (res.ok && Array.isArray(data)) {
         setNotifications(data);
@@ -26,19 +23,19 @@ export default function NotificationsPage() {
 
   const handleMarkAllRead = async () => {
     try {
-      const savedUser = localStorage.getItem('user');
-      const userId = savedUser ? JSON.parse(savedUser).id : 'user-1';
-
       await fetch('/api/v1/notifications/read-all', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId }),
       });
 
       setNotifications([]);
     } catch {
       // Ignore
     }
+  };
+
+  const handleMarkRead = async (id: string) => {
+    const res = await fetch(`/api/v1/notifications/${id}/read`, { method: 'PATCH' });
+    if (res.ok) setNotifications((items) => items.filter((item) => item.id !== id));
   };
 
   useEffect(() => {
@@ -81,6 +78,7 @@ export default function NotificationsPage() {
                 <pre className="mt-1 text-xs text-slate-600 font-sans whitespace-pre-wrap">{JSON.stringify(n.payload, null, 2)}</pre>
                 <span className="mt-2 block text-[11px] text-slate-400">{new Date(n.created_at).toLocaleString('id-ID')}</span>
               </div>
+              <button onClick={() => handleMarkRead(n.id)} className="text-xs font-semibold text-blue-600 hover:text-blue-800">Tandai dibaca</button>
             </div>
           ))
         )}

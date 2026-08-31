@@ -28,11 +28,6 @@ export default function LoginPage() {
         throw new Error(data.message || 'Gagal login. Periksa username dan password Anda.');
       }
 
-      // Save user session in localStorage
-      if (data.user) {
-        localStorage.setItem('user', JSON.stringify(data.user));
-      }
-
       router.push('/tickets');
     } catch (err: any) {
       setError(err.message);

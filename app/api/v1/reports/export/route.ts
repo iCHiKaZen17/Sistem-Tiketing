@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ReportService } from '@/lib/reports/report-service';
 import { createErrorResponse } from '@/lib/utils/error-response';
+import { parseReportRange } from '@/lib/reports/date-range';
 
 export async function GET(request: NextRequest) {
   try {
-    const dateFrom = request.nextUrl.searchParams.get('from') || new Date(Date.now() - 30 * 86400000).toISOString();
-    const dateTo = request.nextUrl.searchParams.get('to') || new Date().toISOString();
+    const { dateFrom, dateTo } = parseReportRange(request.nextUrl.searchParams.get('from'), request.nextUrl.searchParams.get('to'));
 
     const csvContent = await ReportService.exportCsv(dateFrom, dateTo);
 

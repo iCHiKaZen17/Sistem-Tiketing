@@ -9,7 +9,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const currentUser = getAuthenticatedUser(request);
+    const currentUser = await getAuthenticatedUser(request);
     if (!currentUser) {
       return createErrorResponse('UNAUTHORIZED', 'Tidak terautentikasi.', 401);
     }

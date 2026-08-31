@@ -16,7 +16,8 @@ const createManualTicketSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const currentUser = getAuthenticatedUser(request);
+    const currentUser = await getAuthenticatedUser(request);
+    if (!currentUser) return createErrorResponse('UNAUTHORIZED', 'Sesi tidak valid.', 401);
     const searchParams = Object.fromEntries(request.nextUrl.searchParams.entries());
     const filter = ticketFilterSchema.parse(searchParams);
 
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const currentUser = getAuthenticatedUser(request);
+    const currentUser = await getAuthenticatedUser(request);
     if (!currentUser || currentUser.role !== 'SUPERVISOR') {
       return createErrorResponse('FORBIDDEN', 'Hanya Supervisor yang dapat membuat tiket manual.', 403);
     }

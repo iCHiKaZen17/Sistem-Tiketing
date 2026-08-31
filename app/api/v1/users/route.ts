@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { createUserSchema } from '@/lib/utils/validation';
 import { createErrorResponse } from '@/lib/utils/error-response';
+import { hashPassword } from '@/lib/auth/password';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
       .from('users')
       .insert({
         username: validated.username,
-        password_hash: validated.password, // hashed in production
+        password_hash: await hashPassword(validated.password),
         full_name: validated.full_name,
         role: validated.role,
         is_active: true,

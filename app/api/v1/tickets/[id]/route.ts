@@ -12,7 +12,8 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const currentUser = getAuthenticatedUser(request);
+    const currentUser = await getAuthenticatedUser(request);
+    if (!currentUser) return createErrorResponse('UNAUTHORIZED', 'Sesi tidak valid.', 401);
     const detail = await TicketService.getTicketDetail(params.id, currentUser);
     
     return NextResponse.json(detail, {

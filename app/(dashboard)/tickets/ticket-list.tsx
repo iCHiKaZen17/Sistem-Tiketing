@@ -7,7 +7,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
 import { AddTicketModal } from '@/components/tickets/add-ticket-modal';
 import { TicketSummary, TicketStatus } from '@/lib/types/ticket';
-import { authHeaders, getCurrentUser } from '@/lib/frontend/auth';
+import { authHeaders, getCurrentUser, fetchCurrentUser } from '@/lib/frontend/auth';
+import { useTicketEvents } from '@/lib/frontend/use-ticket-events';
 
 interface StaffOption {
   id: string;
@@ -21,13 +22,16 @@ export function TicketList() {
   const [staffFilter, setStaffFilter] = useState<string>('');
   const [staffList, setStaffList] = useState<StaffOption[]>([]);
   const [search, setSearch] = useState<string>('');
+  const [appFilter, setAppFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
   const [currentUser, setCurrentUser] = useState<ReturnType<typeof getCurrentUser>>(null);
 
   useEffect(() => {
-    setCurrentUser(getCurrentUser());
+    fetchCurrentUser().then(setCurrentUser);
   }, []);
 
   useEffect(() => {
@@ -52,6 +56,9 @@ export function TicketList() {
       if (statusFilter) queryParams.set('status', statusFilter);
       if (staffFilter) queryParams.set('assigned_to', staffFilter);
       if (search.trim().length >= 3) queryParams.set('search', search.trim());
+      if (appFilter.trim()) queryParams.set('app_name', appFilter.trim());
+      if (dateFrom) queryParams.set('date_from', `${dateFrom}T00:00:00.000Z`);
+      if (dateTo) queryParams.set('date_to', `${dateTo}T23:59:59.999Z`);
       queryParams.set('page', String(page));
       queryParams.set('limit', '10');
 
@@ -70,10 +77,11 @@ export function TicketList() {
       setLoading(false);
     }
   };
+  const realtimeConnected = useTicketEvents(fetchTickets);
 
   useEffect(() => {
     fetchTickets();
-  }, [statusFilter, staffFilter, page]);
+  }, [statusFilter, staffFilter, appFilter, dateFrom, dateTo, page]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,6 +91,7 @@ export function TicketList() {
 
   return (
     <div className="space-y-6">
+      {!realtimeConnected && <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">Koneksi realtime terputus. Polling setiap 30 detik aktif.</div>}
       {/* Search & Filter Header */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm border border-slate-200">
         <form onSubmit={handleSearchSubmit} className="flex flex-1 items-center gap-2">
@@ -153,6 +162,13 @@ export function TicketList() {
             </select>
           </div>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-4">
+        <input value={appFilter} onChange={(e) => { setAppFilter(e.target.value); setPage(1); }} placeholder="Nama aplikasi" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+        <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" aria-label="Tanggal awal" />
+        <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" aria-label="Tanggal akhir" />
+        <button onClick={() => { setStatusFilter(''); setStaffFilter(''); setAppFilter(''); setDateFrom(''); setDateTo(''); setSearch(''); setPage(1); }} className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300">Reset Filter</button>
       </div>
 
       <AddTicketModal

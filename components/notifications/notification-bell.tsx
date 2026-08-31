@@ -2,15 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useTicketEvents } from '@/lib/frontend/use-ticket-events';
 
 export function NotificationBell({ userId }: { userId?: string }) {
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
-  useEffect(() => {
+  const refresh = () => {
     if (!userId) return;
-
-    // Fetch unread count
-    fetch(`/api/v1/notifications?user_id=${userId}`)
+    fetch('/api/v1/notifications')
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -18,7 +17,9 @@ export function NotificationBell({ userId }: { userId?: string }) {
         }
       })
       .catch(() => {});
-  }, [userId]);
+  };
+  useEffect(refresh, [userId]);
+  useTicketEvents(refresh);
 
   return (
     <Link

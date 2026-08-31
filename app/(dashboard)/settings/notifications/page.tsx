@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { NotificationPreferences } from '@/lib/types/notification';
+import { fetchCurrentUser } from '@/lib/frontend/auth';
 
 export default function NotificationPreferencesPage() {
   const [prefs, setPrefs] = useState<NotificationPreferences>({
@@ -16,15 +17,14 @@ export default function NotificationPreferencesPage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    const userId = savedUser ? JSON.parse(savedUser).id : 'user-1';
-
-    fetch(`/api/v1/notifications/preferences?user_id=${userId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.user_id) setPrefs(data);
-      })
-      .catch(() => {});
+    const load = async () => {
+      const user = await fetchCurrentUser();
+      if (!user) return;
+      const res = await fetch('/api/v1/notifications/preferences');
+      const data = await res.json();
+      if (data?.user_id) setPrefs(data);
+    };
+    load().catch(() => {});
   }, []);
 
   const handleToggle = (key: keyof NotificationPreferences) => {

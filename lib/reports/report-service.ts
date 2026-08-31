@@ -106,7 +106,10 @@ export class ReportService {
     ].join(',');
 
     const rows = (tickets || []).map((t) => {
-      const escapeCsv = (str: string | null | undefined) => `"${(str || '').replace(/"/g, '""')}"`;
+      const escapeCsv = (str: string | null | undefined) => {
+        const safe = /^[=+\-@]/.test(str || '') ? `'${str}` : (str || '');
+        return `"${safe.replace(/"/g, '""')}"`;
+      };
       return [
         escapeCsv(t.ticket_number),
         escapeCsv(t.reporters?.name),
