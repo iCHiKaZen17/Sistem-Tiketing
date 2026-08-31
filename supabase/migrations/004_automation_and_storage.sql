@@ -10,6 +10,5 @@ VALUES ('ticket-attachments', 'ticket-attachments', false, 10485760,
 ON CONFLICT (id) DO UPDATE SET public=false, file_size_limit=10485760,
   allowed_mime_types=EXCLUDED.allowed_mime_types;
 
--- Storage is accessed only by server service role through authenticated app APIs.
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON storage.objects FROM anon, authenticated;
+-- storage.objects is managed by Supabase. The private bucket is accessed only
+-- by the server-side secret/service-role key, which bypasses Storage RLS.
