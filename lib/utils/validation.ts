@@ -5,6 +5,11 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password wajib diisi'),
 });
 
+export const userPasswordSchema = z
+  .string()
+  .min(10, 'Password harus terdiri dari minimal 10 karakter.')
+  .max(128, 'Password tidak boleh lebih dari 128 karakter.');
+
 export const createTicketSchema = z.object({
   reporter_id: z.string().uuid('ID reporter tidak valid'),
   app_name: z.string().max(200).optional(),
@@ -39,8 +44,14 @@ export const ticketFilterSchema = z.object({
 });
 
 export const createUserSchema = z.object({
-  username: z.string().min(3).max(100),
-  password: z.string().min(10, 'Password minimal 10 karakter').max(128),
-  full_name: z.string().min(1).max(200),
+  username: z
+    .string()
+    .min(3, 'Username harus terdiri dari minimal 3 karakter.')
+    .max(100, 'Username tidak boleh lebih dari 100 karakter.'),
+  password: userPasswordSchema,
+  full_name: z
+    .string()
+    .min(1, 'Nama lengkap wajib diisi.')
+    .max(200, 'Nama lengkap tidak boleh lebih dari 200 karakter.'),
   role: z.enum(['STAFF', 'SUPERVISOR']),
 });

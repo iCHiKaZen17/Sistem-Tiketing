@@ -101,6 +101,8 @@ export default function UserManagementPage() {
               <input
                 type="text"
                 required
+                minLength={3}
+                maxLength={100}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="cth: budi.staff"
@@ -113,6 +115,7 @@ export default function UserManagementPage() {
               <input
                 type="text"
                 required
+                maxLength={200}
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="cth: Budi Setiawan"
@@ -125,6 +128,8 @@ export default function UserManagementPage() {
               <input
                 type="password"
                 required
+                minLength={10}
+                maxLength={128}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Minimal 10 karakter"
@@ -203,7 +208,7 @@ export default function UserManagementPage() {
             </table>
           )}
           {resetUserId && <form onSubmit={handleResetPassword} className="flex gap-2 border-t border-slate-200 p-4">
-            <input type="password" minLength={10} required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Password baru, min. 10 karakter" className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <input type="password" minLength={10} maxLength={128} required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Password baru, min. 10 karakter" className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
             <button className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Simpan</button>
             <button type="button" onClick={() => { setResetUserId(''); setNewPassword(''); }} className="px-3 py-2 text-sm">Batal</button>
           </form>}

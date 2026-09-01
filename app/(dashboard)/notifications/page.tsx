@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { NotificationEvent } from '@/lib/types/notification';
+import { presentNotification } from '@/lib/notifications/presentation';
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<NotificationEvent[]>([]);
@@ -66,21 +68,31 @@ export default function NotificationsPage() {
         ) : notifications.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-500">Tidak ada notifikasi baru.</div>
         ) : (
-          notifications.map((n) => (
-            <div key={n.id} className="p-4 flex items-start gap-4 hover:bg-slate-50 transition-colors">
+          notifications.map((n) => {
+            const presentation = presentNotification(n);
+
+            return <div key={n.id} className="p-4 flex items-start gap-4 hover:bg-slate-50 transition-colors">
               <div className="rounded-full bg-blue-100 p-2 text-blue-600 shrink-0">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31" />
                 </svg>
               </div>
               <div className="flex-1">
-                <p className="text-sm font-semibold text-slate-900">{n.event_type}</p>
-                <pre className="mt-1 text-xs text-slate-600 font-sans whitespace-pre-wrap">{JSON.stringify(n.payload, null, 2)}</pre>
+                <p className="text-sm font-semibold text-slate-900">{presentation.title}</p>
+                <p className="mt-1 text-sm text-slate-600">{presentation.message}</p>
+                {presentation.ticketHref && (
+                  <Link
+                    href={presentation.ticketHref}
+                    className="mt-2 inline-block text-xs font-semibold text-blue-600 hover:text-blue-800"
+                  >
+                    Buka tiket
+                  </Link>
+                )}
                 <span className="mt-2 block text-[11px] text-slate-400">{new Date(n.created_at).toLocaleString('id-ID')}</span>
               </div>
               <button onClick={() => handleMarkRead(n.id)} className="text-xs font-semibold text-blue-600 hover:text-blue-800">Tandai dibaca</button>
-            </div>
-          ))
+            </div>;
+          })
         )}
       </div>
     </div>
