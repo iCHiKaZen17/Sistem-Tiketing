@@ -38,6 +38,8 @@ export default function ReporterManagementPage() {
 
   useEffect(() => {
     fetchReporters();
+    // Pencarian adalah satu-satunya state yang memicu pemuatan ulang otomatis.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
   const handleCreateReporter = async (e: React.FormEvent) => {
@@ -101,7 +103,7 @@ export default function ReporterManagementPage() {
                 placeholder="cth: 6285155401156"
                 className="mt-1 block w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
               />
-              <span className="text-[11px] text-slate-400 mt-1 block">Gunakan kode negara (62...) tanpa tanda '+'</span>
+              <span className="text-[11px] text-slate-400 mt-1 block">Gunakan kode negara (62...) tanpa tanda +</span>
             </div>
 
             <div>

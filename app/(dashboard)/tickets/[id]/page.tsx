@@ -80,6 +80,8 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   useEffect(() => {
     fetchTicketDetail();
     fetchStaffList();
+    // Muat ulang saat berpindah tiket; pembaruan data berikutnya ditangani realtime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
   const handleAssign = async (e: React.FormEvent) => {
@@ -337,7 +339,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           {ticket.status === 'RESOLVED' || ticket.status === 'CLOSED' ? (
             <div className="rounded-lg bg-slate-50 p-4 border border-slate-200">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Catatan Resolusi Terdaftar</span>
-              <p className="mt-1 text-sm text-slate-800 italic">"{ticket.resolution_note || 'Tidak ada catatan'}"</p>
+              <p className="mt-1 text-sm text-slate-800 italic">“{ticket.resolution_note || 'Tidak ada catatan'}”</p>
             </div>
           ) : canResolve ? (
             <form onSubmit={handleResolve} className="space-y-4">

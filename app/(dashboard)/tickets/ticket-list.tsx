@@ -81,6 +81,8 @@ export function TicketList() {
 
   useEffect(() => {
     fetchTickets();
+    // Pencarian teks diterapkan saat form dikirim; filter lain diterapkan otomatis.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, staffFilter, appFilter, dateFrom, dateTo, page]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {

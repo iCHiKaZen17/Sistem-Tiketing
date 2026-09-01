@@ -36,6 +36,8 @@ export default function ReportsPage() {
 
   useEffect(() => {
     fetchReport();
+    // Perubahan rentang tanggal baru diterapkan melalui tombol Tampilkan Laporan.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleExportCsv = () => {
