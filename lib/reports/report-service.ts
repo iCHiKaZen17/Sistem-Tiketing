@@ -1,5 +1,22 @@
 import { createAdminClient } from '@/lib/supabase/server';
 
+export function formatReportDate(value: string | null | undefined): string {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jakarta',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(date).replace(',', '');
+}
+
 export interface ReportSummary {
   total_tickets: number;
   by_status: Record<string, number>;
@@ -116,8 +133,8 @@ export class ReportService {
         escapeCsv(t.app_name),
         escapeCsv(t.status),
         escapeCsv(t.users?.full_name),
-        escapeCsv(t.created_at),
-        escapeCsv(t.resolved_at),
+        escapeCsv(formatReportDate(t.created_at)),
+        escapeCsv(formatReportDate(t.resolved_at)),
         escapeCsv(t.resolution_note),
       ].join(',');
     });
