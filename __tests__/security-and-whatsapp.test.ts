@@ -1,6 +1,6 @@
 import { hashPassword, verifyPassword } from '@/lib/auth/password';
 import { createSessionToken, verifySessionToken } from '@/lib/auth/session';
-import { parseStructuredTicketFields, parseTicketTrigger } from '@/lib/whatsapp/webhook-service';
+import { parseResolutionReply, parseStructuredTicketFields, parseTicketTrigger } from '@/lib/whatsapp/webhook-service';
 import { verifyHmacSha256 } from '@/lib/whatsapp/signature';
 import { createHmac } from 'crypto';
 
@@ -31,6 +31,12 @@ describe('WhatsApp trigger and signature', () => {
       app_name: 'Payroll', error_desc: 'Tidak bisa login', repro_steps: 'Buka aplikasi lalu login',
     });
     expect(parseStructuredTicketFields('Payroll gagal dibuka')).toEqual({ error_desc: 'Payroll gagal dibuka' });
+  });
+
+  it('accepts only explicit resolution confirmation replies', () => {
+    expect(parseResolutionReply(' YA ')).toBe('CONFIRMED');
+    expect(parseResolutionReply('Belum Selesai')).toBe('NOT_RESOLVED');
+    expect(parseResolutionReply('masih error')).toBeNull();
   });
 
   it('verifies sha256 HMAC over the raw body', () => {

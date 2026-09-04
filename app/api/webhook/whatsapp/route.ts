@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { normalizeWebhook } from '@/lib/whatsapp/normalizer';
 import { verifyHmacSha256 } from '@/lib/whatsapp/signature';
-import { processInboundMessage } from '@/lib/whatsapp/webhook-service';
+import { markWebhookEventFailed, markWebhookEventProcessed, processInboundMessage } from '@/lib/whatsapp/webhook-service';
 import { enqueueWhatsAppReply } from '@/lib/whatsapp/outbox-service';
 import { checkRateLimit, requestIp } from '@/lib/cache/rate-limit';
 
@@ -33,9 +33,15 @@ export async function POST(request: NextRequest) {
   const messages = normalizeWebhook(payload, provider);
   const results = [];
   for (const message of messages) {
-    const result = await processInboundMessage(message, provider);
-    if (result.reply && result.action !== 'TICKET_CREATED') await enqueueWhatsAppReply(`${provider}:${message.id}:${result.action}`, result.reply, result.ticketId);
-    results.push(result);
+    try {
+      const result = await processInboundMessage(message, provider);
+      if (result.reply && result.action !== 'TICKET_CREATED') await enqueueWhatsAppReply(`${provider}:${message.id}:${result.action}`, result.reply, result.ticketId);
+      if (result.action !== 'DUPLICATE') await markWebhookEventProcessed(provider, message.id);
+      results.push(result);
+    } catch (error) {
+      await markWebhookEventFailed(provider, message.id, error);
+      throw error;
+    }
   }
   return NextResponse.json({ received: messages.length, results });
 }

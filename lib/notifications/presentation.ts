@@ -60,6 +60,12 @@ export function presentNotification(
           : 'Pesan WhatsApp gagal dikirim setelah beberapa percobaan.',
       };
     }
+    case 'WHATSAPP_INBOUND_MEDIA_FAILED':
+      return {
+        title: 'Lampiran WhatsApp gagal diproses',
+        message: `${ticket} menerima lampiran yang tidak berhasil disimpan dan perlu diperiksa.`,
+        ticketHref,
+      };
     case 'SYSTEM_JOB_FAILED':
       return {
         title: 'Proses otomatis mengalami kegagalan',

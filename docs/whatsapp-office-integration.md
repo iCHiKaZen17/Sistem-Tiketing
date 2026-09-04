@@ -12,6 +12,9 @@ trigger `#t` (case-insensitive). Contoh valid:
 `Halo #t ...`, `#test`, media tanpa teks, status delivery, dan pesan biasa tidak
 akan membuat tiket.
 
+Saat tiket berstatus `RESOLVED`, Reporter membalas `YA` untuk menutup tiket atau
+`BELUM SELESAI` untuk mengembalikannya ke status `IN_PROGRESS`.
+
 ## Payload gateway kantor
 
 Format default yang diterima:
@@ -29,6 +32,25 @@ Format default yang diterima:
 Alias berikut juga dikenali: `message_id`, `sender`, `phone`, dan `message`.
 Batch dapat dikirim sebagai `{ "messages": [...] }`. Jika payload kantor berbeda,
 hanya ubah `lib/whatsapp/normalizer.ts`.
+
+Media inbound menggunakan payload metadata yang sama dengan tambahan berikut:
+
+```json
+{
+  "id": "unique-message-id",
+  "from": "628123456789",
+  "type": "image",
+  "caption": "#t Tampilan aplikasi error",
+  "media_id": "office-media-id",
+  "filename": "error.png",
+  "mime_type": "image/png"
+}
+```
+
+Hanya media dengan caption berawalan `#t` yang membuat tiket dan masuk antrean
+download. Atur `WHATSAPP_OFFICE_MEDIA_DOWNLOAD_URL` sebagai URL template yang
+memuat `{media_id}` dan isi tokennya. Binary tidak disimpan di payload webhook,
+database antrean, atau QStash.
 
 ## Keamanan request
 
@@ -58,6 +80,12 @@ Token opsional dikirim sebagai `Authorization: Bearer <token>`. Balasan disimpan
 lebih dulu di tabel `whatsapp_outbox`; worker QStash mengirim dan retry. Jangan
 aktifkan `ENABLE_WHATSAPP_OUTBOX_SCHEDULE` sebelum endpoint outbound tersedia.
 
+Pengiriman attachment memakai endpoint terpisah melalui multipart dengan field
+default `to`, `file`, dan `caption`. Isi `WHATSAPP_OFFICE_ATTACHMENT_SEND_URL`
+serta `WHATSAPP_OFFICE_ATTACHMENT_API_TOKEN`. Dalam satu delivery, worker selalu
+mengirim teks terlebih dahulu lalu attachment sesuai urutan; item yang sudah
+berhasil tidak dikirim ulang ketika langkah berikutnya retry.
+
 ## Provider Meta
 
 Adapter Meta juga tersedia. Atur `WHATSAPP_WEBHOOK_PROVIDER=meta`,
@@ -77,6 +105,8 @@ Jalankan migration secara berurutan:
 7. `supabase/migrations/007_whatsapp_outbox.sql`
 8. `supabase/migrations/008_auth_audit.sql`
 9. `supabase/migrations/009_notification_deduplication.sql`
+10. `supabase/migrations/010_whatsapp_ordered_media.sql`
+11. `supabase/migrations/011_reopen_unresolved_ticket.sql`
 
 Migration tersebut menambahkan transaksi atomik, automation markers, private
 attachment bucket, pencarian terpaginasi, klaim tiket, dan durable outbound queue.

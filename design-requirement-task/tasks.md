@@ -7,7 +7,7 @@
 - BLOCKED EXTERNAL: membutuhkan akses, kredensial, atau dokumentasi API WhatsApp kantor.
 - Migration prepared berarti file SQL tersedia; bukan berarti sudah diterapkan ke database.
 
-Baseline terakhir: 8 Jest suites, 26 tests, pemeriksaan migration, TypeScript check, dan production build lulus.
+Baseline terakhir: 10 Jest suites, 33 tests, pemeriksaan migration, lint, TypeScript check, dan production build lulus.
 
 ## 1. Fondasi dan Database
 
@@ -24,7 +24,9 @@ Baseline terakhir: 8 Jest suites, 26 tests, pemeriksaan migration, TypeScript ch
 - [x] Siapkan migration 007 durable WhatsApp outbox.
 - [x] Siapkan migration 008 untuk audit autentikasi.
 - [x] Siapkan migration 009 untuk deduplikasi notifikasi.
-- [ ] Terapkan migration 001–009 ke Supabase staging.
+- [x] Siapkan migration 010 untuk ordered outbound dan media inbound.
+- [x] Siapkan migration 011 untuk mengembalikan tiket yang belum selesai ke IN_PROGRESS.
+- [ ] Terapkan migration 001–011 ke Supabase staging.
 - [ ] Jalankan migration smoke test dan rollback rehearsal.
 - [x] Sediakan script bootstrap Supervisor pertama.
 - [ ] Jalankan dan validasi bootstrap Supervisor pada staging.
@@ -74,12 +76,17 @@ Baseline terakhir: 8 Jest suites, 26 tests, pemeriksaan migration, TypeScript ch
 - [x] Abaikan pesan biasa sebagai pembuat tiket baru.
 - [x] Tambahkan follow-up message ke tiket aktif.
 - [x] Implementasikan YA untuk close tiket RESOLVED.
+- [x] Implementasikan BELUM SELESAI untuk mengembalikan tiket RESOLVED ke IN_PROGRESS.
 - [x] Implementasikan webhook idempotency.
 - [x] Sediakan optional outbound HTTP adapter.
+- [x] Pisahkan adapter outbound teks dan attachment multipart.
+- [x] Tambahkan urutan delivery teks lalu attachment dan retry per item.
+- [x] Tambahkan normalisasi caption dan media ID inbound.
+- [x] Siapkan antrean serta worker download media inbound.
 - [ ] BLOCKED EXTERNAL: dapatkan dokumentasi dan kredensial WhatsApp Gateway kantor.
 - [ ] BLOCKED EXTERNAL: finalisasi inbound payload mapping.
 - [ ] BLOCKED EXTERNAL: finalisasi outbound endpoint dan authentication.
-- [ ] BLOCKED EXTERNAL: implementasikan media download.
+- [ ] BLOCKED EXTERNAL: finalisasi mapping endpoint media download kantor.
 - [ ] BLOCKED EXTERNAL: proses sent/delivered/read/failed status.
 - [ ] BLOCKED EXTERNAL: uji webhook dan outbound end-to-end.
 - [ ] BLOCKED EXTERNAL: verifikasi SLA, retry, dan timeout gateway.
@@ -107,6 +114,7 @@ Baseline terakhir: 8 Jest suites, 26 tests, pemeriksaan migration, TypeScript ch
 - [x] Implementasikan RESOLVED auto-close 24 jam.
 - [x] Lindungi manual invocation dengan JOB_SECRET.
 - [x] Sediakan setup QStash schedule maintenance setiap lima menit dan outbox setiap menit.
+- [x] Sediakan schedule media inbox setiap menit dengan feature flag terpisah.
 - [x] Verifikasi callback memakai Upstash-Signature.
 - [x] Dukung current dan next signing key melalui environment.
 - [x] Konfigurasikan retry policy dan failure callback di setup script.
@@ -156,7 +164,8 @@ Catatan: nomor tiket dan account lockout tidak dipindahkan kembali ke Redis. Pos
 - [ ] Terapkan dan verifikasi bucket migration pada staging.
 - [ ] Tambahkan antivirus scanning sebelum produksi.
 - [ ] Tambahkan attachment integration test.
-- [ ] BLOCKED EXTERNAL: download dan simpan media WhatsApp.
+- [x] Siapkan download, validasi, dan penyimpanan media WhatsApp secara asynchronous.
+- [ ] BLOCKED EXTERNAL: verifikasi kontrak dan download media pada gateway kantor.
 
 ## 10. Reporting dan Dashboard
 
@@ -192,7 +201,7 @@ Catatan: nomor tiket dan account lockout tidak dipindahkan kembali ke Redis. Pos
 ## 12. Testing dan Deployment
 
 - [x] Unit test utility, auth helpers, attachment validation, report range, webhook trigger, HMAC, password, session, operational fallback, parser, dan log redaction.
-- [x] Seluruh 26 test lulus pada baseline terakhir.
+- [x] Seluruh 33 test lulus pada baseline terakhir.
 - [x] TypeScript check lulus.
 - [x] Production build lulus.
 - [ ] Tambahkan API integration test dengan Supabase staging/local.
@@ -210,7 +219,7 @@ Catatan: nomor tiket dan account lockout tidak dipindahkan kembali ke Redis. Pos
 
 ## 13. Urutan Pekerjaan yang Dapat Dilakukan Tanpa API WhatsApp
 
-1. Terapkan migration 001–009 ke staging dan verifikasi.
+1. Terapkan migration 001–011 ke staging dan verifikasi.
 2. Buat resource Redis/QStash, pasang secret, dan jalankan setup schedule.
 3. Jalankan integration/E2E test pada staging.
 4. Tambahkan monitoring, backup, dan restore drill.

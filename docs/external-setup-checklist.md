@@ -8,7 +8,7 @@ secret milik organisasi sehingga harus dilakukan oleh pemilik environment.
 - [ ] Buat atau pilih project staging dan aktifkan backup sebelum migration.
 - [ ] Salin Project URL, anon key, dan service-role key ke environment deployment.
 - [ ] Jalankan `supabase/migrations/001_initial_schema.sql` sampai
-  `009_notification_deduplication.sql` berurutan melalui SQL Editor atau Supabase CLI.
+  `011_reopen_unresolved_ticket.sql` berurutan melalui SQL Editor atau Supabase CLI.
 - [ ] Pastikan tabel utama, RPC, RLS, dan bucket private `ticket-attachments` ada.
 - [ ] Buat Supervisor pertama dengan script bootstrap di bawah.
 - [ ] Login, buat tiket, assign, resolve, close, dan unduh lampiran sebagai smoke test.
@@ -53,9 +53,14 @@ Setelah API outbound WhatsApp tersedia, isi URL/token gateway, ubah
 `ENABLE_WHATSAPP_OUTBOX_SCHEDULE=true`, deploy ulang, dan jalankan kembali
 `npm run qstash:setup` agar schedule `whatsapp-outbox-1m` dibuat.
 
+Setelah kontrak download media inbound tersedia, isi URL template/token media,
+ubah `ENABLE_WHATSAPP_MEDIA_SCHEDULE=true`, lalu jalankan kembali setup agar
+schedule `whatsapp-media-inbox-1m` dibuat.
+
 ## 4. WhatsApp Gateway Kantor
 
-- [ ] Minta kontrak payload inbound, header/signature, endpoint outbound, auth, dan SLA.
+- [ ] Minta kontrak payload inbound, header/signature, endpoint teks, endpoint
+  attachment multipart, endpoint download media, auth, dan SLA.
 - [ ] Isi environment `WHATSAPP_OFFICE_*` berdasarkan data resmi kantor.
 - [ ] Daftarkan `POST /api/webhook/whatsapp` sebagai webhook.
 - [ ] Uji pesan biasa, `#t`, duplicate message ID, follow-up, dan `YA`.

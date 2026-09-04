@@ -4,11 +4,11 @@
 
 Sistem menyediakan dashboard internal untuk mengelola laporan kendala aplikasi. Reporter akan mengirim laporan melalui WhatsApp Gateway kantor, sedangkan Staff dan Supervisor menangani tiket melalui dashboard web.
 
-Status per 31 Agustus 2026:
+Status per 4 September 2026:
 
 - Core dashboard, autentikasi, RBAC, tiket, notifikasi, laporan, audit trail, lampiran, maintenance handler, dan webhook adapter tersedia dalam kode.
 - Integrasi nyata dengan WhatsApp Gateway kantor belum dapat diuji karena akses API belum tersedia.
-- Migration database 001 sampai 009 sudah disiapkan; penerapan pada Supabase staging belum diverifikasi.
+- Migration database 001 sampai 011 sudah disiapkan; penerapan migration terbaru pada Supabase staging belum diverifikasi.
 - Redis dan QStash sudah terhubung di kode. Pembuatan resource, secret, schedule, dan uji staging masih harus dilakukan pada layanan nyata.
 
 ## 2. Arsitektur Aktual
@@ -23,7 +23,8 @@ Alur utama:
 6. SSE /api/v1/events memberi sinyal perubahan ke browser; polling 30 detik menjadi fallback.
 7. Webhook /api/webhook/whatsapp menerima payload Meta atau gateway kantor.
 8. Maintenance endpoint dipanggil QStash dan dilindungi signature atau secret manual.
-9. Balasan WhatsApp masuk ke durable outbox PostgreSQL lalu dikirim worker QStash.
+9. Balasan WhatsApp masuk ke durable outbox PostgreSQL lalu dikirim worker QStash secara berurutan: teks kemudian attachment.
+10. Media inbound `#t` masuk antrean download terpisah sebelum disimpan ke private Storage dan tiket.
 
 Pembagian tanggung jawab:
 
@@ -63,13 +64,14 @@ Redis:
 2. HMAC-SHA256 diverifikasi sebelum parsing JSON.
 3. Normalizer mengubah payload menjadi format internal.
 4. Tabel webhook_events mencegah pemrosesan provider message ID yang sama.
-5. Hanya teks yang dimulai #t yang membuat tiket.
+5. Teks atau caption media yang dimulai #t dapat membuat tiket.
 6. Reporter harus terdaftar dan aktif.
 7. RPC create_ticket_atomic membuat tiket dan audit dalam satu transaksi.
 8. Balasan dimasukkan ke whatsapp_outbox secara idempotent.
-9. Worker mengklaim pesan dengan lease lima menit, mengirim, retry dengan exponential backoff, lalu memberi notifikasi Supervisor setelah gagal permanen.
+9. Worker mengklaim pesan dengan lease lima menit, menjaga urutan teks–attachment, retry hanya item gagal, lalu memberi notifikasi Supervisor setelah gagal permanen.
+10. Media inbound diunduh asynchronous berdasarkan `media_id`, divalidasi, lalu disimpan ke tiket.
 
-Pesan biasa tidak membuat tiket baru. Pesan biasa dapat ditambahkan ke tiket OPEN/IN_PROGRESS terakhir. Balasan YA pada tiket RESOLVED menutup tiket.
+Pesan biasa tidak membuat tiket baru. Pesan biasa dapat ditambahkan ke tiket OPEN/IN_PROGRESS terakhir. Pada tiket RESOLVED, balasan YA menutup tiket dan BELUM SELESAI mengembalikannya ke IN_PROGRESS.
 
 ### 3.3 Siklus tiket
 
@@ -77,7 +79,7 @@ Status valid:
 
 - OPEN ke IN_PROGRESS atau CLOSED.
 - IN_PROGRESS ke RESOLVED atau CLOSED.
-- RESOLVED ke CLOSED.
+- RESOLVED ke CLOSED atau kembali ke IN_PROGRESS setelah konfirmasi Reporter.
 - CLOSED ke IN_PROGRESS oleh Supervisor.
 
 Supervisor dapat assign/reassign. Reassignment membutuhkan alasan. Staff dapat mengklaim tiket OPEN tanpa assignee. Staff yang ditugaskan dapat resolve dengan catatan 10–2000 karakter. Hanya Supervisor dapat close/reopen melalui dashboard API.
@@ -131,6 +133,7 @@ Tabel utama:
 - notification_preferences
 - webhook_events
 - whatsapp_outbox
+- whatsapp_media_inbox
 - auth_audit_logs
 
 Migration:
@@ -144,6 +147,8 @@ Migration:
 7. 007_whatsapp_outbox.sql: durable outbound queue dan atomic claim.
 8. 008_auth_audit.sql: audit login, lockout, dan logout.
 9. 009_notification_deduplication.sql: idempotency key notifikasi.
+10. 010_whatsapp_ordered_media.sql: urutan outbound dan antrean media inbound.
+11. 011_reopen_unresolved_ticket.sql: penolakan resolusi oleh Reporter.
 
 Role anon dan authenticated tidak memiliki akses tabel langsung. Browser hanya memakai API aplikasi. Service-role hanya digunakan server-side setelah autentikasi dan RBAC.
 
@@ -206,6 +211,7 @@ Operations:
 - GET /api/health
 - POST /api/jobs/ticket-maintenance
 - POST /api/jobs/whatsapp-outbox
+- POST /api/jobs/whatsapp-media-inbox
 - POST /api/jobs/qstash-failure
 - GET dan POST /api/webhook/whatsapp
 

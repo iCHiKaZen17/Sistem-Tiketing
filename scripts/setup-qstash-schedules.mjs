@@ -14,6 +14,11 @@ if (process.env.ENABLE_WHATSAPP_OUTBOX_SCHEDULE === 'true') {
 } else {
   console.log('whatsapp-outbox-1m: dilewati (ENABLE_WHATSAPP_OUTBOX_SCHEDULE bukan true)');
 }
+if (process.env.ENABLE_WHATSAPP_MEDIA_SCHEDULE === 'true') {
+  schedules.push({ scheduleId: 'whatsapp-media-inbox-1m', destination: `${baseUrl}/api/jobs/whatsapp-media-inbox`, cron: '* * * * *', retries: 3, failureCallback });
+} else {
+  console.log('whatsapp-media-inbox-1m: dilewati (ENABLE_WHATSAPP_MEDIA_SCHEDULE bukan true)');
+}
 
 for (const schedule of schedules) {
   const result = await client.schedules.create(schedule);

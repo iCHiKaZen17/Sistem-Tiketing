@@ -24,7 +24,7 @@ Sistem memungkinkan karyawan melaporkan kendala melalui WhatsApp Gateway kantor 
 
 Status: Partial / Blocked External
 
-1. Hanya pesan teks yang setelah whitespace dimulai #t yang boleh membuat tiket.
+1. Hanya pesan teks atau caption media yang setelah whitespace dimulai #t yang boleh membuat tiket.
 2. Pesan biasa tidak boleh otomatis membuat tiket baru.
 3. Nomor Reporter harus terdaftar dan aktif.
 4. Tiket baru berstatus OPEN dan memakai nomor TKT-YYYYMMDD-NNNN yang unik.
@@ -49,6 +49,7 @@ Status: Partial / Blocked External
 4. Reminder kelengkapan dikirim setelah 15 menit.
 5. Tiket dapat ditutup 15 menit setelah reminder tanpa respons.
 6. Balasan YA case-insensitive pada tiket RESOLVED harus menutup tiket.
+7. Balasan BELUM SELESAI case-insensitive harus mengembalikan tiket ke IN_PROGRESS.
 7. Pesan dan balasan bot harus tersimpan kronologis.
 
 Implemented: append follow-up, YA close, automation handler, chronological history.
@@ -91,7 +92,7 @@ Status: Implemented / Blocked External
 1. Hanya Staff yang ditugaskan atau Supervisor boleh resolve tiket IN_PROGRESS.
 2. Catatan resolusi wajib 10–2000 karakter.
 3. Resolve mengubah status, menyimpan catatan, deadline, dan audit dalam satu transaksi.
-4. Reporter dapat menutup tiket RESOLVED dengan YA.
+4. Reporter dapat menutup tiket RESOLVED dengan YA atau mengembalikannya ke IN_PROGRESS dengan BELUM SELESAI.
 5. Tiket RESOLVED tanpa konfirmasi ditutup otomatis setelah 24 jam.
 6. Hanya Supervisor dapat close atau reopen melalui dashboard API.
 7. Reopen mengubah CLOSED menjadi IN_PROGRESS.
@@ -171,7 +172,7 @@ Status: Implemented / Blocked External
 5. Download memakai signed URL 60 detik setelah access check.
 6. Metadata dan audit tersimpan pada tiket.
 7. File storage dibersihkan jika metadata gagal.
-8. Download media WhatsApp berstatus Blocked External.
+8. Antrean, validasi, dan penyimpanan media WhatsApp tersedia; mapping endpoint download tetap Blocked External.
 9. Antivirus scanning berstatus Planned untuk produksi.
 
 ### Requirement 12: Operasional, Redis, dan QStash
@@ -186,7 +187,7 @@ Status: Implemented in Code / External Setup Required
 6. Redis harus dipakai untuk distributed rate limit.
 7. Redis harus menyimpan revocation session sampai expiry.
 8. Redis dapat menyimpan cache laporan dengan TTL pendek; PostgreSQL tetap sumber kebenaran.
-9. Outbound WhatsApp harus memakai durable outbox dan retry setelah API tersedia.
+9. Outbound WhatsApp harus memakai durable outbox, mengirim teks sebelum attachment, dan retry hanya item yang gagal.
 10. Backup, alerting, load test, dan restore drill wajib sebelum produksi.
 
 Implemented: health endpoint, structured logging, request ID, QStash signature verification, setup schedule, failure callback, Redis rate limit/revocation/cache/lock, dan durable WhatsApp outbox.
@@ -221,7 +222,7 @@ External Setup Required: resource dan secret Upstash, penerapan migration Supaba
 
 Tersedia:
 
-- 8 Jest suites dan 26 tests lulus.
+- 10 Jest suites dan 33 tests lulus.
 - Pemeriksaan statis migration lulus.
 - TypeScript check lulus.
 - Next.js production build lulus.

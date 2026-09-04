@@ -18,7 +18,7 @@ export class TicketService {
   private static VALID_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
     OPEN: ['IN_PROGRESS', 'CLOSED'],
     IN_PROGRESS: ['RESOLVED', 'CLOSED'],
-    RESOLVED: ['CLOSED'],
+    RESOLVED: ['IN_PROGRESS', 'CLOSED'],
     CLOSED: ['IN_PROGRESS'], // Only Supervisor can reopen
   };
 
@@ -190,7 +190,7 @@ export class TicketService {
     const resolvedPhone = (resolvedContact as any)?.reporters?.phone;
     if (resolvedPhone) await enqueueWhatsAppReply(`ticket:${params.ticket_id}:resolved:${updatedTicket.resolved_at}`, {
       to: resolvedPhone,
-      text: `Tiket ${updatedTicket.ticket_number} telah diselesaikan. ${trimmedNote}\nBalas YA jika masalah sudah selesai.`,
+      text: `Tiket ${updatedTicket.ticket_number} telah diselesaikan. ${trimmedNote}\nBalas YA jika masalah sudah selesai, atau BELUM SELESAI jika kendala masih terjadi.`,
     }, params.ticket_id);
 
     return updatedTicket;
