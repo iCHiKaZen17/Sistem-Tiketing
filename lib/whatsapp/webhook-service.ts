@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { TicketService } from '@/lib/tickets/ticket-service';
 import { InboundWhatsAppMessage, WebhookProcessingResult, WhatsAppReply } from './types';
 import { enqueueInboundMedia } from './media-inbox-service';
+import { resolveReporterTicket } from './ticket-routing';
 
 const TRIGGER = '#t';
 
@@ -64,29 +65,46 @@ export async function processInboundMessage(message: InboundWhatsAppMessage, pro
   if (!reporter?.is_active) return {
     eventId: message.id, action: 'REJECTED', reply: reply('Nomor WhatsApp Anda belum terdaftar atau tidak aktif. Silakan hubungi administrator ticketing.'),
   };
-  if (!message.text) return { eventId: message.id, action: 'IGNORED' };
+  if (!message.text && !message.media) return { eventId: message.id, action: 'IGNORED' };
 
   const description = parseTicketTrigger(message.text);
   if (description === null) {
-    if (message.media || message.type !== 'text') return { eventId: message.id, action: 'IGNORED' };
-    const { data: latest } = await supabase.from('tickets').select('id,ticket_number,status,app_name,error_desc,repro_steps').eq('reporter_id', reporter.id).in('status', ['OPEN','IN_PROGRESS','RESOLVED']).order('created_at', { ascending: false }).limit(1).maybeSingle();
-    if (!latest) return { eventId: message.id, action: 'IGNORED' };
+    if (!message.media && message.type !== 'text') return { eventId: message.id, action: 'IGNORED' };
+    const { data: completed, error: confirmationError } = await supabase.from('whatsapp_resolution_confirmations')
+      .select('ticket_id,confirmed').eq('event_id', `${provider}:${message.id}`).eq('reporter_id', reporter.id).maybeSingle();
+    if (confirmationError) throw new Error(confirmationError.message);
+    if (completed) return {
+      eventId: message.id, action: completed.confirmed ? 'TICKET_CLOSED' : 'TICKET_REOPENED', ticketId: completed.ticket_id,
+      reply: reply(completed.confirmed ? 'Tiket telah ditutup. Terima kasih.' : 'Tiket dikembalikan ke proses penanganan.'),
+    };
+    const routed = await resolveReporterTicket(supabase, reporter.id, message.text || '');
+    if (!routed.ticket) return { eventId: message.id, action: 'REJECTED', reply: reply(routed.error!) };
+    const latest = routed.ticket;
+    const text = routed.text;
+    if (message.media) {
+      if (!['OPEN', 'IN_PROGRESS'].includes(latest.status)) return { eventId: message.id, action: 'REJECTED', reply: reply('Lampiran hanya dapat ditambahkan ke tiket OPEN atau IN_PROGRESS. Jika solusi belum berhasil, balas BELUM SELESAI beserta nomor tiket.') };
+      await enqueueInboundMedia({ provider, providerEventId: message.id, mediaId: message.media.id, ticketId: latest.id, filename: message.media.filename, mimeType: message.media.mimeType });
+      return { eventId: message.id, action: 'MESSAGE_APPENDED', ticketId: latest.id, ticketNumber: latest.ticket_number, reply: reply(`Lampiran untuk tiket ${latest.ticket_number} diterima dan sedang diproses.`) };
+    }
+    const confirmation = parseResolutionReply(text);
+    if (confirmation && latest.status !== 'RESOLVED') return { eventId: message.id, action: 'REJECTED', reply: reply('Konfirmasi hanya berlaku untuk tiket RESOLVED.') };
     if (latest.status === 'RESOLVED') {
-      const confirmation = parseResolutionReply(message.text);
+      // The RPC checks ownership and RESOLVED under a row lock.
       if (confirmation === 'CONFIRMED') {
-        const { error } = await supabase.rpc('change_ticket_status_atomic', { p_ticket_id: latest.id, p_new_status: 'CLOSED', p_actor_id: null, p_actor_label: reporter.name, p_reason: 'Dikonfirmasi Reporter melalui WhatsApp.' });
+        const { error } = await supabase.rpc('confirm_reporter_resolution', { p_ticket_id: latest.id, p_reporter_id: reporter.id, p_confirmed: true, p_event_id: `${provider}:${message.id}` });
         if (error) throw new Error(error.message);
         return { eventId: message.id, action: 'TICKET_CLOSED', ticketId: latest.id, ticketNumber: latest.ticket_number, reply: reply(`Tiket ${latest.ticket_number} telah ditutup. Terima kasih.`) };
       }
       if (confirmation === 'NOT_RESOLVED') {
-        const { error } = await supabase.rpc('change_ticket_status_atomic', { p_ticket_id: latest.id, p_new_status: 'IN_PROGRESS', p_actor_id: null, p_actor_label: reporter.name, p_reason: 'Reporter menyatakan masalah belum selesai melalui WhatsApp.' });
+        const { error } = await supabase.rpc('confirm_reporter_resolution', { p_ticket_id: latest.id, p_reporter_id: reporter.id, p_confirmed: false, p_event_id: `${provider}:${message.id}` });
         if (error) throw new Error(error.message);
         return { eventId: message.id, action: 'TICKET_REOPENED', ticketId: latest.id, ticketNumber: latest.ticket_number, reply: reply(`Tiket ${latest.ticket_number} dikembalikan ke proses penanganan.`) };
       }
     }
     if (latest.status === 'OPEN' || latest.status === 'IN_PROGRESS') {
-      await TicketService.appendMessage({ ticket_id: latest.id, entry_type: 'REPORTER_MESSAGE', content: message.text.trim(), wa_message_id: message.id, actor_label: reporter.name });
-      const parsed = parseStructuredTicketFields(message.text);
+      if (!text) return { eventId: message.id, action: 'REJECTED', reply: reply('Tambahkan pesan setelah nomor tiket.') };
+      await TicketService.appendMessage({ ticket_id: latest.id, entry_type: 'REPORTER_MESSAGE', content: text, wa_message_id: message.id, actor_label: reporter.name });
+      const parsed = parseStructuredTicketFields(text);
       const update = {
         ...(!latest.app_name && parsed.app_name ? { app_name: parsed.app_name } : {}),
         ...(!latest.error_desc && parsed.error_desc ? { error_desc: parsed.error_desc } : {}),
@@ -99,7 +117,7 @@ export async function processInboundMessage(message: InboundWhatsAppMessage, pro
         reply: Object.keys(update).length ? reply(complete ? `Informasi tiket ${latest.ticket_number} sudah lengkap.` : `Informasi tiket ${latest.ticket_number} diperbarui. Lengkapi dengan format Aplikasi:, Deskripsi:, dan Langkah:.`) : undefined,
       };
     }
-    return { eventId: message.id, action: 'IGNORED' };
+    return { eventId: message.id, action: 'REJECTED', reply: reply(`Tiket ${latest.ticket_number} berstatus ${latest.status}. Untuk tiket RESOLVED, balas YA atau BELUM SELESAI beserta nomor tiket.`) };
   }
 
   if (!description) return {
@@ -107,11 +125,11 @@ export async function processInboundMessage(message: InboundWhatsAppMessage, pro
   };
 
   const structured = parseStructuredTicketFields(description);
-  if (message.media) {
+  {
     const { data: previousHistory } = await supabase.from('ticket_history').select('ticket_id').eq('wa_message_id', message.id).maybeSingle();
     if (previousHistory?.ticket_id) {
       const { data: previousTicket } = await supabase.from('tickets').select('ticket_number').eq('id', previousHistory.ticket_id).single();
-      await enqueueInboundMedia({
+      if (message.media) await enqueueInboundMedia({
         provider, providerEventId: message.id, mediaId: message.media.id, ticketId: previousHistory.ticket_id,
         filename: message.media.filename, mimeType: message.media.mimeType,
       });

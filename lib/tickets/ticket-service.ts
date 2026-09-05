@@ -190,7 +190,7 @@ export class TicketService {
     const resolvedPhone = (resolvedContact as any)?.reporters?.phone;
     if (resolvedPhone) await enqueueWhatsAppReply(`ticket:${params.ticket_id}:resolved:${updatedTicket.resolved_at}`, {
       to: resolvedPhone,
-      text: `Tiket ${updatedTicket.ticket_number} telah diselesaikan. ${trimmedNote}\nBalas YA jika masalah sudah selesai, atau BELUM SELESAI jika kendala masih terjadi.`,
+      text: `Tiket ${updatedTicket.ticket_number} telah diselesaikan. ${trimmedNote}\nBalas YA ${updatedTicket.ticket_number} jika masalah sudah selesai, atau BELUM SELESAI ${updatedTicket.ticket_number} jika kendala masih terjadi.`,
     }, params.ticket_id);
 
     return updatedTicket;

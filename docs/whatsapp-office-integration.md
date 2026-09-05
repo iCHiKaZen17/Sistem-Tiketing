@@ -2,6 +2,19 @@
 
 Endpoint inbound: `POST /api/webhook/whatsapp`
 
+## Routing tiket (migration 012)
+
+Pesan lanjutan dan lampiran tanpa caption otomatis masuk jika Reporter hanya
+memiliki satu tiket belum CLOSED. Jika lebih dari satu, cantumkan nomor tiket
+pada teks/caption; bot meminta pengiriman ulang bila tujuan ambigu. Nomor tiket
+harus milik Reporter tersebut. Lampiran hanya diterima untuk OPEN/IN_PROGRESS.
+
+Konfirmasi: `YA TKT-20260905-0001` atau `BELUM SELESAI TKT-20260905-0001`.
+Tanpa nomor, konfirmasi hanya otomatis bila ada tepat satu tiket belum CLOSED.
+Status wajib RESOLVED dan diverifikasi dalam transaksi database. Terapkan
+`012_reporter_confirmation.sql` sebelum deployment. Integrasi gateway dan
+konkurensi PostgreSQL masih memerlukan verifikasi staging.
+
 Pesan hanya membuat tiket bila teks, setelah spasi awal dibuang, dimulai dengan
 trigger `#t` (case-insensitive). Contoh valid:
 
